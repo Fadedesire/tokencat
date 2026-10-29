@@ -1,8 +1,8 @@
-// Настройки, нужные клиенту данных (S05): интервал обновления, прокси, последняя организация.
-// Полное окно настроек — шаг S11; он допишет сюда остальные поля.
+// Настройки программы: данные (S05), панель (S07), окно настроек и онбординг (B1).
 //
 // Файл `settings.json` в папке настроек приложения
-// (Windows: %APPDATA%\app.tokencat.desktop\, macOS: ~/Library/Application Support/…).
+// (Windows: %APPDATA%\app.tokencat.desktop\, macOS: ~/Library/Application Support/…);
+// у дополнительных профилей — в `profiles\<имя>\settings.json` там же (см. profile.rs).
 // Секретов здесь нет: ключ сессии живёт только в системном хранилище.
 
 use std::path::{Path, PathBuf};
@@ -13,6 +13,12 @@ use serde::{Deserialize, Serialize};
 /// Допустимые интервалы опроса, секунды (решение пользователя 2026-10-29: 30 с по умолчанию)
 pub const INTERVALS: [u64; 3] = [30, 60, 120];
 pub const DEFAULT_INTERVAL: u64 = 30;
+
+/// Виды. Пока есть только «Поверх окон»; «В панели задач» (Windows) и «В строке меню» (macOS)
+/// добавит B2 — тогда они появятся здесь.
+pub const VIEWS: [&str; 1] = ["overlay"];
+/// Языки интерфейса (переводы — B3). "system" — язык системы, иначе английский.
+pub const LANGS: [&str; 10] = ["system", "ru", "en", "es", "pt-BR", "de", "fr", "ja", "ko", "zh-Hans"];
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -28,6 +34,23 @@ pub struct Settings {
     pub overlay_y: Option<i32>,
     /// Держать панель поверх остальных окон
     pub always_on_top: bool,
+    /// Вид: overlay (см. VIEWS)
+    pub view: String,
+    /// Показывать котика
+    pub show_cat: bool,
+    /// Уведомления о 80 % / 100 % 5-часового лимита и о его сбросе
+    pub notify: bool,
+    /// Язык интерфейса (см. LANGS)
+    pub language: String,
+    /// Онбординг пройден (или пропущен) — больше не показываем
+    pub onboarded: bool,
+    /// Имя аккаунта claude.ai для шапки, трея и меню «Аккаунты». Почту сюда не пишем.
+    pub account_name: Option<String>,
+    /// Когда имя последний раз получено (секунды от 1970) — обновляем раз в сутки
+    pub account_name_at: Option<u64>,
+    /// О каком уровне 5-часового лимита уже сообщили: 0, 80 или 100 (чтобы после
+    /// перезапуска не повторять уведомление)
+    pub notify_level: u8,
 }
 
 impl Default for Settings {
@@ -39,6 +62,14 @@ impl Default for Settings {
             overlay_x: None,
             overlay_y: None,
             always_on_top: true,
+            view: "overlay".into(),
+            show_cat: true,
+            notify: true,
+            language: "system".into(),
+            onboarded: false,
+            account_name: None,
+            account_name_at: None,
+            notify_level: 0,
         }
     }
 }
@@ -58,8 +89,28 @@ impl Settings {
             self.overlay_x = None;
             self.overlay_y = None;
         }
+        if !VIEWS.contains(&self.view.as_str()) {
+            self.view = VIEWS[0].into();
+        }
+        if !LANGS.contains(&self.language.as_str()) {
+            self.language = "system".into();
+        }
+        if !matches!(self.notify_level, 0 | 80 | 100) {
+            self.notify_level = 0;
+        }
+        self.account_name = self.account_name.as_deref().and_then(clean_account_name);
         self
     }
+}
+
+/// Имя аккаунта для показа: без почты, без пробелов по краям, не длиннее 64 символов
+/// (обрезает с «…» уже интерфейс). Пустое или похожее на почту — None.
+pub fn clean_account_name(raw: &str) -> Option<String> {
+    let s = raw.trim();
+    if s.is_empty() || s.contains('@') {
+        return None;
+    }
+    Some(s.chars().take(64).collect())
 }
 
 /// uuid организации: только hex и дефисы (подставляется в путь запроса).
@@ -227,5 +278,32 @@ mod tests {
         assert_eq!(SettingsStore::load(path.clone()).get().interval_secs, 30);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn new_fields_defaults_and_cleanup() {
+        // Старый settings.json (до B1) — новые поля получают значения по умолчанию
+        let s: Settings = serde_json::from_str(r#"{"interval_secs": 60, "always_on_top": false}"#).unwrap();
+        let s = s.sanitized();
+        assert_eq!(s.interval_secs, 60);
+        assert!(!s.always_on_top);
+        assert_eq!(s.view, "overlay");
+        assert!(s.show_cat && s.notify && !s.onboarded);
+        assert_eq!(s.language, "system");
+
+        let bad = Settings {
+            view: "taskbar-из-будущего".into(),
+            language: "klingon".into(),
+            notify_level: 55,
+            account_name: Some("  roma@example.com ".into()),
+            ..Settings::default()
+        }
+        .sanitized();
+        assert_eq!(bad.view, "overlay");
+        assert_eq!(bad.language, "system");
+        assert_eq!(bad.notify_level, 0);
+        assert_eq!(bad.account_name, None);
+        assert_eq!(clean_account_name("  Рома  ").as_deref(), Some("Рома"));
+        assert_eq!(clean_account_name(&"я".repeat(100)).unwrap().chars().count(), 64);
     }
 }

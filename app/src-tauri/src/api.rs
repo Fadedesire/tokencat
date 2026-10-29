@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crate::auth::key::SessionKey;
 use crate::auth::verdict::{classify, ResponseInfo, Verdict};
-use crate::settings::is_uuid_like;
+use crate::settings::{clean_account_name, is_uuid_like};
 use crate::usage::{self, Usage};
 
 pub const BASE: &str = "https://claude.ai";
@@ -122,6 +122,13 @@ impl Net {
             .ok_or_else(|| Failure::new(Verdict::Unexpected, Some(200), "список организаций пуст"))
     }
 
+    /// Имя аккаунта для шапки (B1, п. 9): `/api/account` → display_name, full_name…
+    /// Почту не берём. None — имени нет (тогда покажем «TokenCat»).
+    pub async fn account_name(&self, key: &SessionKey) -> Result<Option<String>, Failure> {
+        let v = self.get_json(key, "/api/account").await?;
+        Ok(pick_account_name(&v).map(|(name, _)| name))
+    }
+
     pub async fn usage(&self, key: &SessionKey, org: &str) -> Result<Usage, Failure> {
         // uuid организации подставляем в путь — проверяем, что там нет ничего лишнего
         if !is_uuid_like(org) {
@@ -156,6 +163,32 @@ pub fn pick_org(orgs: &Value, preferred: Option<&str>) -> Option<OrgInfo> {
     })
 }
 
+/// Имя из ответа /api/account. Источник неофициальный, поэтому смотрим несколько мест:
+/// сначала поля верхнего уровня, потом вложенный `account`. Возвращает имя и поле-источник
+/// (для лога). Похожее на почту отбрасываем.
+pub fn pick_account_name(v: &Value) -> Option<(String, &'static str)> {
+    const FIELDS: [&str; 3] = ["display_name", "full_name", "name"];
+    for root in [v, &v["account"]] {
+        for f in FIELDS {
+            if let Some(n) = root[f].as_str().and_then(clean_account_name) {
+                return Some((n, f));
+            }
+        }
+    }
+    None
+}
+
+/// Запасное имя из названия организации: «Рома's Organization» → «Рома».
+/// Название вида «почта's Organization» отбрасываем.
+pub fn name_from_org(org: &str) -> Option<String> {
+    let s = org.trim();
+    let s = s
+        .strip_suffix("'s Organization")
+        .or_else(|| s.strip_suffix("’s Organization"))
+        .unwrap_or(s);
+    clean_account_name(s)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,6 +205,24 @@ mod tests {
         assert_eq!(pick_org(&orgs, Some("zzz")).unwrap().uuid, "bbb");
         assert!(pick_org(&json!([]), None).is_none());
         assert!(pick_org(&json!({"error": 1}), None).is_none());
+    }
+
+    #[test]
+    fn account_names() {
+        let v = json!({"uuid": "x", "email_address": "r@x.io", "full_name": "Роман П.", "display_name": "Рома"});
+        assert_eq!(pick_account_name(&v), Some(("Рома".into(), "display_name")));
+        let v = json!({"display_name": "", "full_name": "Роман"});
+        assert_eq!(pick_account_name(&v).unwrap().0, "Роман");
+        let v = json!({"account": {"display_name": "Рома"}});
+        assert_eq!(pick_account_name(&v).unwrap().0, "Рома");
+        // Почту как имя не показываем
+        let v = json!({"display_name": "r@x.io", "email_address": "r@x.io"});
+        assert_eq!(pick_account_name(&v), None);
+        assert_eq!(pick_account_name(&json!([])), None);
+
+        assert_eq!(name_from_org("Рома's Organization").as_deref(), Some("Рома"));
+        assert_eq!(name_from_org("r@x.io's Organization"), None);
+        assert_eq!(name_from_org("Студия Котиков").as_deref(), Some("Студия Котиков"));
     }
 
     #[test]

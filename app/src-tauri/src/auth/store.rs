@@ -7,8 +7,8 @@ use super::key::SessionKey;
 
 /// Имя «сервиса» в хранилище. В Диспетчере учётных данных видно как
 /// `tokencat-session.app.tokencat.desktop` (так keyring формирует имя).
+/// Учётка у каждого профиля своя: `tokencat-session`, `tokencat-session-2`… (profile.rs).
 pub const SERVICE: &str = "app.tokencat.desktop";
-pub const ACCOUNT: &str = "tokencat-session";
 
 pub trait SecretStore: Send + Sync {
     /// Ok(None) — ключа нет (не входили или вышли).
@@ -18,12 +18,18 @@ pub trait SecretStore: Send + Sync {
     fn delete(&self) -> Result<(), String>;
 }
 
-/// Настоящее системное хранилище (crate `keyring`).
-pub struct KeyringStore;
+/// Настоящее системное хранилище (crate `keyring`), одна учётка = один профиль.
+pub struct KeyringStore {
+    account: String,
+}
 
 impl KeyringStore {
+    pub fn new(account: impl Into<String>) -> Self {
+        KeyringStore { account: account.into() }
+    }
+
     fn entry(&self) -> Result<keyring::Entry, String> {
-        keyring::Entry::new(SERVICE, ACCOUNT).map_err(|e| format!("Хранилище секретов: {e}"))
+        keyring::Entry::new(SERVICE, &self.account).map_err(|e| format!("Хранилище секретов: {e}"))
     }
 }
 
@@ -108,7 +114,7 @@ mod tests {
     #[test]
     #[ignore]
     fn real_keyring_roundtrip() {
-        let store = KeyringStore;
+        let store = KeyringStore::new(crate::profile::BASE_ACCOUNT);
         let backup = store.load().unwrap();
         let k = SessionKey::from_trusted(GOOD).unwrap();
         store.save(&k).unwrap();

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TokenCat — добро пожаловать</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="components.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Онбординг первого запуска (B1, п. 7): ОС → вид → вход → автозапуск.
+       У добавленного аккаунта (второй профиль) — только вход и автозапуск.
+       Логика — onboarding.js. -->
+  <main class="onb">
+    <div class="steps" id="steps"></div>
+
+    <!-- 1. Привет и система -->
+    <section class="step" data-step="hello" hidden>
+      <div class="hello">
+        <canvas id="hello-cat" aria-hidden="true"></canvas>
+        <div>
+          <h1>Привет! Это TokenCat</h1>
+          <p class="lead">Маленькая панель, которая в реальном времени показывает, сколько
+            лимитов подписки Claude уже израсходовано — за 5 часов и за неделю — и когда сброс.</p>
+        </div>
+      </div>
+      <div class="check">
+        <div class="text">Ваша система: <b id="os-name"></b>
+          <div class="muted small">Под неё подберём вид панели. Входить будем через окно claude.ai —
+            никаких ключей и паролей в TokenCat.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Вид -->
+    <section class="step" data-step="view" hidden>
+      <h1>Где показывать лимиты?</h1>
+      <p class="lead">Вид можно поменять потом в настройках.</p>
+      <div class="cards" id="cards"></div>
+    </section>
+
+    <!-- 3. Вход -->
+    <section class="step" data-step="login" hidden>
+      <h1 id="login-title">Войдите в Claude</h1>
+      <p class="lead" id="login-lead">Откроется окно claude.ai — войдите как обычно. После входа оно закроется
+        само, а TokenCat сохранит сессию в защищённом хранилище системы.</p>
+      <div class="login-box">
+        <button id="login" class="primary">Войти в Claude</button>
+        <p id="login-msg" class="msg muted" hidden></p>
+      </div>
+    </section>
+
+    <!-- 4. Автозапуск -->
+    <section class="step" data-step="autostart" hidden>
+      <h1>Почти готово</h1>
+      <p class="lead">Панель появится в правом верхнем углу экрана. Её можно перетащить мышкой,
+        двойной клик — обновить, правая кнопка — меню.</p>
+      <label class="check">
+        <span class="switch"><input id="autostart" type="checkbox" checked><i></i></span>
+        <span>Запускать TokenCat вместе с системой</span>
+      </label>
+      <p id="finish-msg" class="msg bad" hidden></p>
+    </section>
+
+    <div class="foot">
+      <button id="back" class="link" hidden>Назад</button>
+      <span class="spacer"></span>
+      <button id="skip" class="link" hidden>Пропустить</button>
+      <button id="next" class="primary">Дальше</button>
+    </div>
+  </main>
+  <script src="cat.js"></script>
+  <script src="components.js"></script>
+  <script src="onboarding.js"></script>
+</body>
+</html>

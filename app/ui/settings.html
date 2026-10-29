@@ -9,45 +9,152 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Временное окно настроек (S07): та же панель + вход/выход, сеть, ручной ключ.
-       Открывается из меню панели (ПКМ → «Настройки…»). Полноценные настройки — S11. -->
-  <main class="card">
+  <!-- Окно настроек (B1, по SPEC). Всё применяется сразу, без кнопки «Сохранить»
+       (кроме прокси и ручного ключа: их сначала проверяем). Открывается из меню панели
+       и значка в трее. Логика — settings.js. -->
+  <main class="settings">
     <div id="panel-slot" class="panel-slot"></div>
-    <p id="account" class="muted small" hidden></p>
-
+    <p id="account-line" class="account-line muted small" hidden></p>
     <div class="actions">
       <button id="refresh" hidden>Обновить</button>
-      <button id="logout" hidden>Выйти</button>
+      <button id="login" class="primary" hidden>Войти в Claude</button>
     </div>
 
-    <details id="network">
-      <summary>Обновление и сеть</summary>
-      <label class="row small">Обновлять каждые
-        <select id="interval"></select>
-      </label>
-      <label class="row small">Прокси (необязательно)
-        <input id="proxy" type="text" spellcheck="false" autocomplete="off"
-          placeholder="127.0.0.1:10808 или socks5://127.0.0.1:1080">
-      </label>
-      <div class="actions">
-        <button id="net-save">Сохранить</button>
+    <section class="group" id="account">
+      <h2>Аккаунт</h2>
+      <div class="box">
+        <div class="item">
+          <div class="text">
+            <span id="acc-name">Не вошли</span>
+            <small id="acc-hint">Каждый аккаунт — отдельная панель со своим входом.</small>
+          </div>
+          <button id="logout" hidden>Выйти</button>
+        </div>
+        <div class="item">
+          <div class="text">Ещё один аккаунт
+            <small>Откроется вторая панель — войдите в ней в другой аккаунт claude.ai.</small>
+          </div>
+          <button id="add-account">Добавить</button>
+        </div>
+        <div class="item col" id="remove-row" hidden>
+          <div class="row-inline">
+            <div class="text">Убрать этот аккаунт из TokenCat
+              <small>Выход, удаление его настроек и автозапуска. Эта панель закроется.</small>
+            </div>
+            <button id="remove" class="danger">Убрать</button>
+          </div>
+          <div id="remove-confirm" class="confirm small" hidden>
+            Точно убрать? Ключ входа будет удалён.
+            <div class="actions left">
+              <button id="remove-yes" class="danger">Да, убрать</button>
+              <button id="remove-no">Отмена</button>
+            </div>
+          </div>
+        </div>
+        <p id="acc-msg" class="msg item" hidden></p>
       </div>
-      <p id="net-msg" class="small" hidden></p>
-    </details>
+    </section>
 
-    <details id="advanced">
-      <summary>Продвинутое: вставить ключ вручную</summary>
-      <p class="muted small">Значение cookie <code>sessionKey</code> с claude.ai. Нужен, только если
-        обычный вход не работает.</p>
-      <textarea id="manual" rows="2" spellcheck="false" autocomplete="off"
-        placeholder="sk-ant-sid01-…"></textarea>
-      <div class="actions">
-        <button id="manual-save">Сохранить ключ</button>
+    <section class="group">
+      <h2>Вид</h2>
+      <div class="box">
+        <div class="item col">
+          <div class="seg" id="views"></div>
+        </div>
+        <div class="item">
+          <div class="text">Поверх всех окон</div>
+          <label class="switch"><input id="on-top" type="checkbox"><i></i></label>
+        </div>
+        <div class="item">
+          <div class="text">Котик
+            <small>Спит без данных, тревожится при 80 % и выше.</small>
+          </div>
+          <label class="switch"><input id="show-cat" type="checkbox"><i></i></label>
+        </div>
       </div>
-      <p id="manual-msg" class="small" hidden></p>
-    </details>
+    </section>
 
-    <p class="muted small footer">Неофициальная программа, не связана с Anthropic.</p>
+    <section class="group">
+      <h2>Обновление и уведомления</h2>
+      <div class="box">
+        <div class="item">
+          <div class="text">Обновлять каждые</div>
+          <select id="interval"></select>
+        </div>
+        <div class="item">
+          <div class="text">Уведомления
+            <small>80 % и 100 % пятичасового лимита, и когда он сбросится.
+              <button id="notify-test" class="link">Проверить</button></small>
+          </div>
+          <label class="switch"><input id="notify" type="checkbox"><i></i></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="group">
+      <h2>Система</h2>
+      <div class="box">
+        <div class="item">
+          <div class="text">Запускать вместе с системой</div>
+          <label class="switch"><input id="autostart" type="checkbox"><i></i></label>
+        </div>
+        <div class="item">
+          <div class="text">Язык
+            <small>Переводы появятся в одной из следующих версий.</small>
+          </div>
+          <select id="language"></select>
+        </div>
+        <p id="sys-msg" class="msg item" hidden></p>
+      </div>
+    </section>
+
+    <section class="group">
+      <h2>Сеть</h2>
+      <div class="box">
+        <div class="item col">
+          <div class="text">Прокси <small>Необязательно. Если claude.ai открывается только через VPN-прокси.</small></div>
+          <div class="row-inline">
+            <input id="proxy" type="text" spellcheck="false" autocomplete="off"
+              placeholder="127.0.0.1:10808 или socks5://127.0.0.1:1080">
+            <button id="proxy-save">Применить</button>
+          </div>
+          <p id="net-msg" class="msg" hidden></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="group">
+      <details class="box" id="advanced">
+        <summary>Продвинутое</summary>
+        <div class="item col">
+          <div class="text">Вставить ключ вручную
+            <small>Значение cookie <code>sessionKey</code> с claude.ai. Нужен, только если обычный
+              вход не работает.</small>
+          </div>
+          <textarea id="manual" rows="2" spellcheck="false" autocomplete="off" placeholder="sk-ant-sid01-…"></textarea>
+          <div class="row-inline"><button id="manual-save">Сохранить ключ</button></div>
+          <p id="manual-msg" class="msg" hidden></p>
+        </div>
+        <div class="item">
+          <div class="text">Лог программы <small>Пригодится, если что-то пошло не так.</small></div>
+          <button id="open-log">Открыть</button>
+        </div>
+        <div class="item">
+          <div class="text">Первое знакомство <small>Показать окно приветствия ещё раз.</small></div>
+          <button id="onboarding">Пройти заново</button>
+        </div>
+      </details>
+    </section>
+
+    <section class="about" id="support">
+      <div class="actions">
+        <button id="donate" class="primary">Поддержать проект</button>
+        <button id="report">Сообщить о проблеме</button>
+      </div>
+      <p id="about-msg" class="msg muted" hidden></p>
+      <p class="muted small">TokenCat <span id="version" class="version"></span> · трекер лимитов для Claude</p>
+      <p class="muted small">Неофициальная программа, не связана с Anthropic.</p>
+    </section>
   </main>
   <script src="cat.js"></script>
   <script src="components.js"></script>

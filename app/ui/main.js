@@ -2,7 +2,9 @@
 // Панель из components.js; данные приходят от планировщика в Rust (событие `usage-updated`).
 //   ЛКМ + тащить — двигать панель (позицию запоминает Rust);
 //   двойной клик — обновить сейчас;
-//   ПКМ — меню (Обновить, Настройки, Поверх окон, Вид, Выход) — нативное, из Rust.
+//   ПКМ — меню (Обновить, Настройки, Поверх окон, Вид, Аккаунты, Поддержать, Выход) —
+//   нативное, общее со значком в трее (Rust, tray.rs).
+// В шапке — имя аккаунта claude.ai (B1), котик выключается в настройках.
 (function () {
   "use strict";
   const { invoke } = window.__TAURI__.core;
@@ -31,7 +33,19 @@
     if (!auth.signed_in) return { state: "signed_out", message: "Вы не вошли в claude.ai" };
     return s;
   }
-  const render = () => { panel.update(viewSnap()); fit(); };
+  const render = () => {
+    const v = viewSnap();
+    panel.update(v);
+    panel.setTitle(auth.signed_in ? v.account_name : null);
+    fit();
+  };
+
+  // Настройки, которые видны на панели: котик
+  function applySettings(st) {
+    if (!st) return;
+    panel.setCat(st.show_cat !== false);
+    fit();
+  }
 
   async function loadAuth() {
     try { auth = await invoke("auth_status"); }
@@ -78,6 +92,7 @@
     if (signedIn !== auth.signed_in) loadAuth().then(render);
     else render();
   });
+  listen("settings-changed", (ev) => applySettings(ev.payload));
   listen("auth-changed", async (ev) => {
     const p = ev.payload || {};
     if (p.kind === "problem" || (p.kind === "cancelled" && p.message)) {
@@ -92,6 +107,7 @@
   setInterval(() => panel.tick(), 1000);
 
   (async () => {
+    try { applySettings(await invoke("settings_get")); } catch (_) {}
     await loadAuth();
     try { snap = await invoke("usage_snapshot"); } catch (_) {}
     render();

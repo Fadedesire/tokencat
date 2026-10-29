@@ -11,7 +11,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # Версии те же, что прошли спайк S02 на ПК пользователя
 # macos-private-api — прозрачное окно «Поверх окон» на macOS (S07); в Mac App Store не идём
-tauri = { version = "2.4", features = ["macos-private-api"] }
+# tray-icon — значок в трее / строке меню (B1)
+tauri = { version = "2.4", features = ["macos-private-api", "tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # HTTP к claude.ai. На Windows native-tls = системный Schannel, на macOS — Security.framework
@@ -20,6 +21,14 @@ reqwest = { version = "0.12", features = ["gzip", "brotli", "json", "socks"] }
 tokio = { version = "1", features = ["time", "sync", "macros"] }
 # Ключ сессии — только в системном хранилище: Credential Manager / Keychain
 keyring = { version = "3", features = ["windows-native", "apple-native"] }
+# Автозапуск по профилю (B1): Run-ключ в HKCU / LaunchAgent. Тот же crate, что внутри
+# tauri-plugin-autostart, но плагин умеет только одну запись на программу.
+auto-launch = "0.6"
+
+# Системные уведомления (B1). Не плагин Tauri: он подменяет window.Notification во всех
+# окнах, включая окно входа claude.ai.
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+notify-rust = { version = "4.18", default-features = false }
 
 # Windows: убрать панель из Alt+Tab (WS_EX_TOOLWINDOW). Версия уже есть в Cargo.lock.
 [target.'cfg(windows)'.dependencies]

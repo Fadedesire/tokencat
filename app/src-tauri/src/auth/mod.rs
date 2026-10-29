@@ -23,6 +23,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::api::{self, OrgInfo};
+use crate::profile::Profile;
 use crate::settings::SettingsStore;
 use crate::{applog, scheduler};
 use key::SessionKey;
@@ -31,10 +32,12 @@ use verdict::Verdict;
 
 pub const MAIN_LABEL: &str = "main";
 pub const LOGIN_LABEL: &str = "claude-login";
-/// Временное окно настроек (S07; полноценное — S11). Права те же, что у главного.
+/// Окно настроек (B1). Права те же, что у главного.
 pub const SETTINGS_LABEL: &str = "settings";
+/// Онбординг первого запуска (B1)
+pub const ONBOARDING_LABEL: &str = "onboarding";
 /// Окна приложения, которым можно вызывать команды и получать события
-pub const UI_LABELS: [&str; 2] = [MAIN_LABEL, SETTINGS_LABEL];
+pub const UI_LABELS: [&str; 3] = [MAIN_LABEL, SETTINGS_LABEL, ONBOARDING_LABEL];
 
 /// Событие всем окнам приложения (но не окну claude.ai).
 pub(crate) fn emit_ui<S: Serialize + Clone>(app: &AppHandle, event: &str, payload: S) {
@@ -183,14 +186,14 @@ pub async fn auth_login(window: WebviewWindow, app: AppHandle) -> CmdResult<()> 
         return Ok(());
     }
     let url = Url::parse(&format!("{}/login", api::BASE)).map_err(err)?;
-    WebviewWindowBuilder::new(&app, LOGIN_LABEL, WebviewUrl::External(url))
+    let b = WebviewWindowBuilder::new(&app, LOGIN_LABEL, WebviewUrl::External(url))
         .title("Вход в claude.ai — TokenCat")
         .inner_size(480.0, 760.0)
         .center()
         // Только https: никаких file:, javascript: и прочего
-        .on_navigation(|u| matches!(u.scheme(), "https" | "about" | "blob" | "data"))
-        .build()
-        .map_err(err)?;
+        .on_navigation(|u| matches!(u.scheme(), "https" | "about" | "blob" | "data"));
+    let b = separate_login_data(&app, b);
+    b.build().map_err(err)?;
 
     let auth = app.state::<Auth>();
     if !auth.login_running.swap(true, Ordering::SeqCst) {
@@ -201,6 +204,61 @@ pub async fn auth_login(window: WebviewWindow, app: AppHandle) -> CmdResult<()> 
         });
     }
     Ok(())
+}
+
+/// Дополнительный профиль (второй аккаунт) входит в claude.ai «с чистого листа», чтобы
+/// не подхватить cookie основного аккаунта и не затереть их.
+///   Windows: своя папка данных WebView2 для окна входа; перед входом её стираем, так что
+///            старые cookie этого профиля тоже не мешают.
+///   macOS:   «приватное» окно входа (данные только в памяти). Своё хранилище по профилю
+///            WKWebView умеет лишь с macOS 14, а нам нужна 13.
+/// Ключ после входа всё равно живёт в Keychain/Credential Manager, cookie окна нам больше не нужны.
+fn separate_login_data<'a>(
+    app: &AppHandle,
+    b: WebviewWindowBuilder<'a, tauri::Wry, AppHandle>,
+) -> WebviewWindowBuilder<'a, tauri::Wry, AppHandle> {
+    let profile = app.state::<Profile>();
+    if profile.is_default() {
+        return b;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        b.incognito(true)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        match app.path().app_local_data_dir().ok().and_then(|d| profile.webview_dir(&d)) {
+            Some(dir) => {
+                let _ = std::fs::remove_dir_all(&dir);
+                b.data_directory(dir)
+            }
+            None => b.incognito(true),
+        }
+    }
+}
+
+/// После входа: имя аккаунта запросить заново (оно могло смениться вместе с аккаунтом).
+fn after_sign_in(app: &AppHandle) {
+    let r = app.state::<SettingsStore>().update(|s| {
+        s.account_name_at = None;
+        s.notify_level = 0;
+    });
+    if let Err(e) = r {
+        applog::warn(e);
+    }
+}
+
+/// После выхода: забыть имя аккаунта и уровень уведомлений.
+fn after_sign_out(app: &AppHandle) {
+    let r = app.state::<SettingsStore>().update(|s| {
+        s.account_name = None;
+        s.account_name_at = None;
+        s.notify_level = 0;
+    });
+    if let Err(e) = r {
+        applog::warn(e);
+    }
+    crate::shell::settings_changed(app);
 }
 
 /// Cookie claude.ai из своего webview. На Windows вызов из основного потока может
@@ -255,6 +313,7 @@ async fn watch_login(app: &AppHandle) {
                 match auth.set_key(k, Some(org)) {
                     Ok(()) => {
                         let _ = w.destroy();
+                        after_sign_in(app);
                         applog::info("вход выполнен");
                         notify(app, "signed_in", None);
                         scheduler::kick(app);
@@ -283,13 +342,30 @@ pub async fn auth_logout(window: WebviewWindow, app: AppHandle) -> CmdResult<()>
     if let Some(w) = app.get_webview_window(LOGIN_LABEL) {
         let _ = w.destroy();
     }
-    app.state::<Auth>().forget()?;
-    // Данные webview общие для всех окон приложения: чистим через главное окно.
-    // Так при следующем «Войти» claude.ai снова спросит логин.
-    window.clear_all_browsing_data().map_err(err)?;
+    sign_out(&app, &window)?;
     applog::info("выход из аккаунта");
     notify(&app, "signed_out", None);
     scheduler::kick(&app);
+    Ok(())
+}
+
+/// Выйти без событий и лога (общая часть «Выйти» и «Удалить аккаунт»).
+pub(crate) fn sign_out(app: &AppHandle, window: &WebviewWindow) -> CmdResult<()> {
+    app.state::<Auth>().forget()?;
+    if app.state::<Profile>().is_default() {
+        // Данные webview общие для всех окон приложения: чистим через окно, из которого
+        // нажали «Выйти». Так при следующем «Войти» claude.ai снова спросит логин.
+        window.clear_all_browsing_data().map_err(err)?;
+    } else if let Some(dir) = app
+        .path()
+        .app_local_data_dir()
+        .ok()
+        .and_then(|d| app.state::<Profile>().webview_dir(&d))
+    {
+        // У второго аккаунта своя папка окна входа — просто стираем её (если не занята)
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    after_sign_out(app);
     Ok(())
 }
 
@@ -306,6 +382,7 @@ pub async fn auth_set_manual_key(
         Ok(org) => {
             let masked = k.masked();
             app.state::<Auth>().set_key(k, Some(org))?;
+            after_sign_in(&app);
             applog::info("ключ введён вручную и принят");
             notify(&app, "signed_in", None);
             scheduler::kick(&app);

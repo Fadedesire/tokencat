@@ -3,7 +3,11 @@
 // - Прозрачное окно без рамки и тени, скругления рисует CSS панели.
 // - Поверх всех окон (переключается в меню, сохраняется в settings.json).
 // - Нет в панели задач и в Alt+Tab (Windows: стиль WS_EX_TOOLWINDOW).
-// - Перетаскивание и двойной клик делает JS (overlay.js), меню ПКМ — здесь, нативное.
+// - Перетаскивание и двойной клик делает JS (main.js), меню ПКМ — нативное, общее с треем
+//   (tray.rs), нажатия обрабатывает shell.rs.
+// - До конца онбординга (B1) панель не показываем.
+// - У дополнительных профилей место по умолчанию сдвинуто вниз, чтобы панели двух
+//   аккаунтов не легли друг на друга.
 // - Позиция запоминается (с задержкой, чтобы не писать файл на каждый пиксель) и при старте
 //   проверяется: если такого места на экранах больше нет (монитор отключили, сменили
 //   разрешение), панель встаёт в правый верхний угол основного монитора.
@@ -13,15 +17,12 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use tauri::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{
-    AppHandle, LogicalSize, Manager, PhysicalPosition, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder,
-};
+use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, WebviewWindow};
 
-use crate::auth::{only_main, MAIN_LABEL, SETTINGS_LABEL};
+use crate::auth::{only_main, MAIN_LABEL};
+use crate::profile::Profile;
 use crate::settings::SettingsStore;
-use crate::{applog, scheduler};
+use crate::{applog, tray};
 
 type CmdResult<T> = Result<T, String>;
 
@@ -29,6 +30,8 @@ type CmdResult<T> = Result<T, String>;
 const PANEL_W: f64 = 252.0;
 /// Отступ от краёв экрана для позиции по умолчанию, логические пиксели
 const EDGE: f64 = 16.0;
+/// Сдвиг вниз для каждого следующего профиля, логические пиксели (панель ~110 px + зазор)
+const SLOT_STEP: f64 = 130.0;
 
 /// Прямоугольник в физических пикселях виртуального экрана: x, y, ширина, высота.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,7 +100,22 @@ fn place(w: &WebviewWindow, app: &AppHandle) {
         },
     };
     let (x, y) = default_spot(mon, ww, (EDGE * mscale) as i32);
+    let slot = app.state::<Profile>().slot();
+    let y = slot_y(mon, y, slot, (SLOT_STEP * mscale) as i32);
     let _ = w.set_position(PhysicalPosition::new(x, y));
+}
+
+/// Вертикаль для копии номер `slot`: ниже на `step` за каждый слот, но не ниже середины экрана
+/// (на маленьком экране панели лягут внахлёст, но обе останутся видны).
+pub fn slot_y(mon: Rect, y: i32, slot: u32, step: i32) -> i32 {
+    let max = mon.y + mon.h / 2;
+    (y + step * slot as i32).min(max.max(y))
+}
+
+/// Панель можно показывать: онбординг пройден и выбран вид «Поверх окон».
+pub fn panel_allowed(app: &AppHandle) -> bool {
+    let s = app.state::<SettingsStore>().get();
+    s.onboarded && s.view == "overlay"
 }
 
 /// Windows: убрать окно из Alt+Tab. skipTaskbar прячет только кнопку на панели задач,
@@ -134,6 +152,9 @@ pub fn setup(app: &AppHandle) {
     let app2 = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(3)).await;
+        if !panel_allowed(&app2) {
+            return;
+        }
         if let Some(w) = app2.get_webview_window(MAIN_LABEL) {
             if !w.is_visible().unwrap_or(true) {
                 applog::info("панель не сообщила размер за 3 с — показываю как есть");
@@ -174,98 +195,25 @@ pub fn on_moved(app: &AppHandle, pos: PhysicalPosition<i32>) {
 
 /// Панель сообщила свой размер (CSS-пиксели). Подгоняем окно и показываем его.
 #[tauri::command]
-pub fn overlay_fit(window: WebviewWindow, width: f64, height: f64) -> CmdResult<()> {
+pub fn overlay_fit(window: WebviewWindow, app: AppHandle, width: f64, height: f64) -> CmdResult<()> {
     if window.label() != MAIN_LABEL {
         return Err("forbidden".into());
     }
     let w = width.clamp(120.0, 600.0);
     let h = height.clamp(30.0, 600.0);
     window.set_size(LogicalSize::new(w, h)).map_err(|e| e.to_string())?;
-    if !window.is_visible().unwrap_or(true) {
+    if panel_allowed(&app) && !window.is_visible().unwrap_or(true) {
         window.show().map_err(|e| e.to_string())?;
     }
     Ok(())
 }
 
-/// Меню по правой кнопке мыши.
+/// Меню по правой кнопке мыши — то же, что у значка в трее.
 #[tauri::command]
 pub async fn overlay_menu(window: WebviewWindow, app: AppHandle) -> CmdResult<()> {
     only_main(&window)?;
-    let on_top = app.state::<SettingsStore>().get().always_on_top;
-    let e = |e: tauri::Error| e.to_string();
-
-    let refresh = MenuItem::with_id(&app, "refresh", "Обновить", true, None::<&str>).map_err(e)?;
-    let settings = MenuItem::with_id(&app, "settings", "Настройки…", true, None::<&str>).map_err(e)?;
-    let top = CheckMenuItem::with_id(&app, "on_top", "Поверх окон", true, on_top, None::<&str>)
-        .map_err(e)?;
-    // «Вид»: остальные виды появятся на шагах S09 (Windows) и S10 (macOS)
-    let v_overlay =
-        CheckMenuItem::with_id(&app, "view_overlay", "Плавающая панель", true, true, None::<&str>)
-            .map_err(e)?;
-    #[cfg(target_os = "macos")]
-    let other_view = "В строке меню — скоро";
-    #[cfg(not(target_os = "macos"))]
-    let other_view = "В панели задач — скоро";
-    let v_other = MenuItem::with_id(&app, "view_other", other_view, false, None::<&str>).map_err(e)?;
-    let view = Submenu::with_items(&app, "Вид", true, &[&v_overlay, &v_other]).map_err(e)?;
-    let sep1 = PredefinedMenuItem::separator(&app).map_err(e)?;
-    let sep2 = PredefinedMenuItem::separator(&app).map_err(e)?;
-    let quit = MenuItem::with_id(&app, "quit", "Выход", true, None::<&str>).map_err(e)?;
-
-    let menu = Menu::with_items(&app, &[&refresh, &settings, &sep1, &top, &view, &sep2, &quit])
-        .map_err(e)?;
-    window.popup_menu(&menu).map_err(e)
-}
-
-/// Нажатия в меню панели (и в будущем — в меню трея, S11).
-pub fn on_menu(app: &AppHandle, event: MenuEvent) {
-    match event.id().as_ref() {
-        "refresh" => scheduler::kick(app),
-        "settings" => {
-            // Окна создаём не в обработчике меню: на Windows это может зависнуть (WebView2)
-            let app = app.clone();
-            tauri::async_runtime::spawn(async move { open_settings(&app) });
-        }
-        "on_top" => toggle_on_top(app),
-        "view_overlay" => {} // уже этот вид; галочку меню перерисует при следующем открытии
-        "quit" => {
-            applog::info("выход из меню панели");
-            app.exit(0);
-        }
-        _ => {}
-    }
-}
-
-fn toggle_on_top(app: &AppHandle) {
-    let store = app.state::<SettingsStore>();
-    let next = !store.get().always_on_top;
-    match store.update(|s| s.always_on_top = next) {
-        Ok(_) => applog::info(format!("поверх окон: {}", if next { "да" } else { "нет" })),
-        Err(e) => applog::warn(format!("не удалось сохранить «поверх окон»: {e}")),
-    }
-    if let Some(w) = app.get_webview_window(MAIN_LABEL) {
-        let _ = w.set_always_on_top(next);
-    }
-}
-
-/// Временное окно настроек: вход/выход, сеть, ручной ключ (всё, что было в главном окне до S07).
-/// Полноценные настройки — шаг S11.
-pub fn open_settings(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window(SETTINGS_LABEL) {
-        let _ = w.show();
-        let _ = w.unminimize();
-        let _ = w.set_focus();
-        return;
-    }
-    let r = WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("settings.html".into()))
-        .title("TokenCat — настройки")
-        .inner_size(420.0, 560.0)
-        .resizable(false)
-        .center()
-        .build();
-    if let Err(e) = r {
-        applog::warn(format!("не удалось открыть настройки: {e}"));
-    }
+    let menu = tray::build_menu(&app).map_err(|e| e.to_string())?;
+    window.popup_menu(&menu).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -297,6 +245,16 @@ mod tests {
         let left = Rect { x: -2560, y: -200, w: 2560, h: 1440 };
         assert!(grabbable(Rect { x: -1000, y: -150, w: 378, h: 140 }, &[A, left]));
         assert!(!grabbable(Rect { x: -1000, y: -150, w: 378, h: 140 }, &[A]));
+    }
+
+    #[test]
+    fn second_profile_lower() {
+        assert_eq!(slot_y(A, 16, 0, 130), 16);
+        assert_eq!(slot_y(A, 16, 1, 130), 146);
+        assert_eq!(slot_y(A, 16, 2, 130), 276);
+        // Не ниже середины экрана
+        assert_eq!(slot_y(A, 16, 7, 130), 540);
+        assert_eq!(slot_y(B, 16, 7, 130), 540);
     }
 
     #[test]

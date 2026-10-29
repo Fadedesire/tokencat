@@ -140,17 +140,13 @@
     constructor(opts = {}) {
       this.opts = opts;
       this.root = el("section", "tc-panel");
-      const head = el("header", "tc-head");
+      const head = (this.head = el("header", "tc-head"));
       this.title = el("span", "tc-title", opts.title || "TokenCat");
       this.dot = el("i", "tc-dot");
       this.time = el("span", "tc-time");
       head.append(this.title, this.dot, this.time);
-      if (opts.cat !== false && TC.Cat) {
-        const cv = el("canvas", "tc-cat");
-        cv.setAttribute("aria-hidden", "true");
-        head.appendChild(cv);
-        this.cat = new TC.Cat(cv, { px: 2, animate: opts.animate !== false });
-      }
+      this.cat = null;
+      this.setCat(opts.cat !== false);
       this.rowsBox = el("div", "tc-rows");
       this.note = el("div", "tc-note"); this.note.hidden = true;
       this.msg = el("div", "tc-msg"); this.msg.hidden = true;
@@ -165,6 +161,29 @@
       this.root.append(head, this.rowsBox, this.note, this.msg);
       this.rows = [];
       this.override = null;
+    }
+
+    /** Котик в шапке: включить/выключить без пересоздания панели (настройка «Котик»). */
+    setCat(on) {
+      if (on && !this.cat && TC.Cat) {
+        const cv = el("canvas", "tc-cat");
+        cv.setAttribute("aria-hidden", "true");
+        this.head.appendChild(cv);
+        this.cat = new TC.Cat(cv, { px: 2, animate: this.opts.animate !== false });
+        if (this.view) this.cat.setMood(this.view.mood);
+      } else if (!on && this.cat) {
+        this.cat.destroy();
+        this.cat.canvas.remove();
+        this.cat = null;
+      }
+      this.root.classList.toggle("tc-no-cat", !this.cat);
+    }
+
+    /** Имя аккаунта в шапке вместо «TokenCat» (длинное обрежется с «…»). */
+    setTitle(name) {
+      const t = name || this.opts.title || "TokenCat";
+      if (this.title.textContent !== t) this.title.textContent = t;
+      this.title.title = name ? "TokenCat · " + name : "TokenCat";
     }
 
     /** Временный текст вместо сообщения (например «Войдите в открывшемся окне…»). */

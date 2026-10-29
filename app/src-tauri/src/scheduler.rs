@@ -10,8 +10,11 @@
 // - Последние хорошие данные не выбрасываем при временной ошибке: UI показывает их как
 //   «устаревшие» вместе с текстом ошибки.
 //
-// Результат каждого цикла — событие `usage-updated` главному окну (Snapshot, без секретов).
+// Результат каждого цикла — событие `usage-updated` окнам приложения (Snapshot, без секретов),
+// подсказка значка в трее и, если пора, уведомление (alerts.rs).
+// Раз в сутки после удачного цикла — имя аккаунта для шапки (B1, п. 9).
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -19,8 +22,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager};
 use tokio::sync::Notify;
 
-use crate::api::{Failure, Net, OrgInfo};
-use crate::applog;
+use crate::api::{name_from_org, Failure, Net, OrgInfo};
+use crate::{alerts, applog, shell, tray};
 use crate::auth::key::SessionKey;
 use crate::auth::verdict::Verdict;
 use crate::auth::{emit_ui, state_for, Auth};
@@ -81,6 +84,8 @@ pub struct Snapshot {
     /// Последние хорошие данные (при ошибке — устаревшие)
     pub usage: Option<Usage>,
     pub org_name: Option<String>,
+    /// Имя аккаунта claude.ai для шапки (без почты); None — показываем «TokenCat»
+    pub account_name: Option<String>,
     /// Когда получены данные `usage` (мс от 1970)
     pub updated_at_ms: Option<u64>,
     /// Когда будет следующая попытка (мс от 1970); None — ждём входа
@@ -97,6 +102,7 @@ impl Snapshot {
             message: "Загружаю данные…".into(),
             usage: None,
             org_name: None,
+            account_name: None,
             updated_at_ms: None,
             next_at_ms: None,
             fetching: true,
@@ -120,12 +126,20 @@ impl Scheduler {
     }
 
     fn edit(&self, app: &AppHandle, f: impl FnOnce(&mut Snapshot)) {
+        let name = app.state::<SettingsStore>().get().account_name;
         let s = {
             let mut g = self.snap.lock().unwrap();
             f(&mut g);
+            g.account_name = if g.state == "signed_out" { None } else { name };
             g.clone()
         };
+        tray::update(app, &s);
         emit_ui(app, "usage-updated", s);
+    }
+
+    /// Разослать текущий снимок ещё раз (например, когда пришло имя аккаунта).
+    pub fn resend(&self, app: &AppHandle) {
+        self.edit(app, |_| {});
     }
 }
 
@@ -223,14 +237,17 @@ async fn cycle(app: &AppHandle, failures: u32) -> (Plan, u32) {
                 *s = Snapshot {
                     state: "ok",
                     message: Verdict::Ok.user_message().into(),
-                    usage: Some(usage),
-                    org_name: org.name,
+                    usage: Some(usage.clone()),
+                    org_name: org.name.clone(),
+                    account_name: None, // подставит edit
                     updated_at_ms: Some(now_ms()),
                     next_at_ms: next_ms(plan),
                     fetching: false,
                     show_log: false,
                 };
             });
+            alerts::on_usage(app, &usage);
+            refresh_account_name(app, &key, &settings, &org).await;
             (plan, 0)
         }
         Err(f) => {
@@ -263,6 +280,52 @@ async fn cycle(app: &AppHandle, failures: u32) -> (Plan, u32) {
             (plan, n)
         }
     }
+}
+
+const DAY_SECS: u64 = 24 * 3600;
+const HOUR_SECS: u64 = 3600;
+/// Когда последний раз пробовали получить имя (секунды): при ошибке — не чаще раза в час
+static NAME_TRY: AtomicU64 = AtomicU64::new(0);
+
+/// Имя аккаунта: при входе и раз в сутки, не каждый цикл (бережём claude.ai).
+async fn refresh_account_name(app: &AppHandle, key: &SessionKey, settings: &Settings, org: &OrgInfo) {
+    let now = now_ms() / 1000;
+    if settings.account_name_at.is_some_and(|at| now.saturating_sub(at) < DAY_SECS) {
+        return;
+    }
+    let last = NAME_TRY.load(Ordering::SeqCst);
+    if last != 0 && now.saturating_sub(last) < HOUR_SECS {
+        return;
+    }
+    NAME_TRY.store(now, Ordering::SeqCst);
+    let fallback = || org.name.as_deref().and_then(name_from_org);
+    let got = match Net::new(settings.proxy.as_deref()) {
+        Ok(net) => net.account_name(key).await,
+        Err(f) => Err(f),
+    };
+    let r = match got {
+        Ok(name) => {
+            let name = name.or_else(fallback);
+            applog::info(if name.is_some() { "имя аккаунта обновлено" } else { "имени аккаунта нет" });
+            app.state::<SettingsStore>().update(|s| {
+                s.account_name = name;
+                s.account_name_at = Some(now);
+            })
+        }
+        Err(f) => {
+            // /api/account неофициальный: если он сломается, берём название организации
+            applog::warn(format!("имя аккаунта не получено: {}", f.detail));
+            if settings.account_name.is_some() {
+                return;
+            }
+            app.state::<SettingsStore>().update(|s| s.account_name = fallback())
+        }
+    };
+    if let Err(e) = r {
+        applog::warn(e);
+    }
+    app.state::<Scheduler>().resend(app);
+    shell::settings_changed(app);
 }
 
 fn next_ms(plan: Plan) -> Option<u64> {

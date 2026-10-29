@@ -31,7 +31,13 @@
   height: 1px;
   background: var(--tc-border);
 }
-.tc-title { font: var(--tc-fs)/1 var(--tc-font-title); font-weight: 600; letter-spacing: .1px; }
+.tc-title {
+  font: var(--tc-fs)/1.2 var(--tc-font-title); font-weight: 600; letter-spacing: .1px;
+  /* Имя аккаунта может быть длинным: место под точку, время и котика оставляем всегда */
+  min-width: 0; max-width: 128px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tc-no-cat .tc-title { max-width: 168px; }
 .tc-dot {
   width: 5px; height: 5px; border-radius: 50%;
   background: var(--tc-muted);
