@@ -10,9 +10,9 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
-/// Допустимые интервалы опроса (SPEC), секунды
-pub const INTERVALS: [u64; 4] = [30, 60, 120, 300];
-pub const DEFAULT_INTERVAL: u64 = 60;
+/// Допустимые интервалы опроса, секунды (решение пользователя 2026-10-29: 30 с по умолчанию)
+pub const INTERVALS: [u64; 3] = [30, 60, 120];
+pub const DEFAULT_INTERVAL: u64 = 30;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -188,19 +188,22 @@ mod tests {
         assert_eq!(st.get(), Settings::default());
 
         st.update(|s| {
-            s.interval_secs = 300;
+            s.interval_secs = 120;
             s.proxy = Some("socks5://127.0.0.1:1080".into());
         })
         .unwrap();
         // «Перезапуск»
         let st2 = SettingsStore::load(path.clone());
-        assert_eq!(st2.get().interval_secs, 300);
+        assert_eq!(st2.get().interval_secs, 120);
         assert_eq!(st2.get().proxy.as_deref(), Some("socks5://127.0.0.1:1080"));
 
         // Испорченный файл и незнакомые поля не роняют программу
         std::fs::write(&path, "{ это не json").unwrap();
         assert_eq!(SettingsStore::load(path.clone()).get(), Settings::default());
-        std::fs::write(&path, r#"{"interval_secs": 30, "future_field": true}"#).unwrap();
+        std::fs::write(&path, r#"{"interval_secs": 60, "future_field": true}"#).unwrap();
+        assert_eq!(SettingsStore::load(path.clone()).get().interval_secs, 60);
+        // Старое значение 5 мин больше не поддерживается — возвращаемся к 30 с
+        std::fs::write(&path, r#"{"interval_secs": 300}"#).unwrap();
         assert_eq!(SettingsStore::load(path.clone()).get().interval_secs, 30);
 
         let _ = std::fs::remove_dir_all(&dir);
