@@ -83,6 +83,13 @@
       bar.innerHTML = '<span class="start"></span><span class="app"></span><span class="app"></span>';
       const w = document.createElement("div");
       w.className = "widget";
+      // Котик и на панели задач (по умолчанию включён, как на плавающей панели)
+      if (TokenCat.Cat) {
+        const cv = document.createElement("canvas");
+        cv.className = "bar-cat";
+        bar.appendChild(cv);
+        new TokenCat.Cat(cv, { px: 1, mood: "idle" });
+      }
       for (const [label, pct] of [["5ч", 42], ["Н", 18]]) {
         const row = document.createElement("span");
         const b = document.createElement("b");
@@ -208,7 +215,8 @@
     try { st = await invoke("settings_get"); } catch (_) { return; }
     await loadAuth();
     view = st.view;
-    $("autostart").checked = st.onboarded ? st.autostart : true;
+    // Автозапуск в онбординге всегда предлагаем включённым (решение Ромы 29.10)
+    $("autostart").checked = true;
     if (st.profile_default) {
       steps = ["hello", "view", "login", "autostart"];
       initHello();

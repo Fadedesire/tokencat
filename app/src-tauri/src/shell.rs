@@ -177,6 +177,11 @@ pub fn finish_onboarding(app: &AppHandle, autostart_on: bool) -> Result<(), Stri
 /// «Добавить аккаунт»: новый профиль и его копия программы.
 pub fn add_account(app: &AppHandle) -> Result<(), String> {
     let known = known_profiles(app);
+    // Уже есть дополнительная панель, в которой ещё не входили? Открываем её, а не плодим новую
+    if let Some(k) = known.iter().find(|k| !k.profile.is_default() && k.account_name.is_none() && !k.signed_in_once) {
+        applog::info(format!("открываю пустой профиль {}", k.profile.id()));
+        return profile::launch(&k.profile);
+    }
     let p = profile::next_free(&known)
         .ok_or_else(|| format!("Можно добавить не больше {} аккаунтов", profile::MAX_PROFILES))?;
     let dir = p.config_dir(&app.state::<AppDirs>().config_base);

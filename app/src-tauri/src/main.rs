@@ -79,6 +79,12 @@ fn main() {
                 instance::listen(l, profile.id().to_string(), move || shell::on_second_instance(&h));
             }
             if !app.state::<settings::SettingsStore>().get().onboarded {
+                // Первый запуск: автозапуск включён по умолчанию (выключить — в онбординге
+                // или настройках). Так он работает, даже если онбординг закрыли крестиком.
+                match autostart::set(&profile, true) {
+                    Ok(()) => applog::info("первый запуск: автозапуск включён"),
+                    Err(e) => applog::warn(e),
+                }
                 shell::open_onboarding(&handle);
             }
             Ok(())

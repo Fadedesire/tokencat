@@ -137,7 +137,8 @@ details.box[open] > summary { border-bottom: 1px solid var(--tc-border); }
 }
 .preview .bar .start { width: 12px; height: 12px; border-radius: 3px; background: #4a90d9; }
 .preview .bar .app { width: 14px; height: 14px; border-radius: 3px; background: #3a3936; }
-.preview .bar .widget { margin-left: auto; display: flex; flex-direction: column; gap: 3px; width: 64px; }
+.preview .bar .bar-cat { margin-left: auto; image-rendering: pixelated; }
+.preview .bar .widget { margin-left: 4px; display: flex; flex-direction: column; gap: 3px; width: 64px; }
 .preview .bar .widget span { display: flex; align-items: center; gap: 4px; font-size: 8px; color: var(--tc-text); }
 .preview .bar .widget b { flex: 1; height: 3px; border-radius: 2px; background: var(--tc-track); position: relative; overflow: hidden; }
 .preview .bar .widget b::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--w); background: var(--tc-green); }

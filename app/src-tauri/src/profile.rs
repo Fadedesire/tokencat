@@ -138,14 +138,14 @@ pub struct Known {
     pub profile: Profile,
     /// Имя аккаунта claude.ai, сохранённое в его settings.json (если уже входили)
     pub account_name: Option<String>,
+    /// В профиле уже входили (известна организация) — даже если имени нет
+    pub signed_in_once: bool,
 }
 
 /// Все известные профили: основной + папки `profiles\*` с settings.json.
 pub fn list(config_base: &Path) -> Vec<Known> {
-    let mut out = vec![Known {
-        profile: Profile::default_profile(),
-        account_name: read_account_name(&config_base.join("settings.json")),
-    }];
+    let (account_name, signed_in_once) = read_info(&config_base.join("settings.json"));
+    let mut out = vec![Known { profile: Profile::default_profile(), account_name, signed_in_once }];
     let mut names: Vec<String> = std::fs::read_dir(config_base.join("profiles"))
         .map(|rd| {
             rd.filter_map(|e| e.ok())
@@ -159,16 +159,23 @@ pub fn list(config_base: &Path) -> Vec<Known> {
     names.sort_by_key(|n| (n.parse::<u64>().unwrap_or(u64::MAX), n.clone()));
     for n in names {
         let p = Profile { name: Some(n) };
-        let account_name = read_account_name(&p.config_dir(config_base).join("settings.json"));
-        out.push(Known { profile: p, account_name });
+        let (account_name, signed_in_once) = read_info(&p.config_dir(config_base).join("settings.json"));
+        out.push(Known { profile: p, account_name, signed_in_once });
     }
     out
 }
 
-fn read_account_name(path: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(path).ok()?;
-    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
-    v["account_name"].as_str().filter(|s| !s.is_empty()).map(String::from)
+/// Имя аккаунта и «входили ли когда-нибудь» (есть last_org) из settings.json профиля.
+fn read_info(path: &Path) -> (Option<String>, bool) {
+    let Some(v) = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+    else {
+        return (None, false);
+    };
+    let name = v["account_name"].as_str().filter(|s| !s.is_empty()).map(String::from);
+    let once = v["last_org"].as_str().is_some_and(|s| !s.is_empty());
+    (name, once)
 }
 
 /// Имя для нового профиля: наименьшее свободное число начиная с 2.
@@ -257,6 +264,7 @@ mod tests {
         let ids: Vec<&str> = l.iter().map(|k| k.profile.id()).collect();
         assert_eq!(ids, ["default", "2", "10"]);
         assert_eq!(l[0].account_name.as_deref(), Some("Рома"));
+        assert!(!l[1].signed_in_once);
         assert_eq!(next_free(&l).unwrap().id(), "3");
         let _ = std::fs::remove_dir_all(&dir);
     }
