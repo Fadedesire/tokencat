@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Дополнения к Info.plist macOS (Tauri сливает этот файл со своим).
+     LSUIElement — программа живёт в строке меню, без значка в Dock (B2). -->
+<plist version="1.0">
+<dict>
+  <key>LSUIElement</key>
+  <true/>
+</dict>
+</plist>

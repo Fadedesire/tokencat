@@ -23,7 +23,7 @@ use tauri::{AppHandle, Manager};
 use tokio::sync::Notify;
 
 use crate::api::{name_from_org, Failure, Net, OrgInfo};
-use crate::{alerts, applog, shell, tray};
+use crate::{alerts, applog, shell};
 use crate::auth::key::SessionKey;
 use crate::auth::verdict::Verdict;
 use crate::auth::{emit_ui, state_for, Auth};
@@ -133,7 +133,7 @@ impl Scheduler {
             g.account_name = if g.state == "signed_out" { None } else { name };
             g.clone()
         };
-        tray::update(app, &s);
+        crate::views::on_snapshot(app, &s);
         emit_ui(app, "usage-updated", s);
     }
 

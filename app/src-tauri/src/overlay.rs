@@ -73,7 +73,7 @@ fn monitor_rect(m: &tauri::Monitor) -> Rect {
 }
 
 /// Поставить панель на сохранённое место или в угол основного монитора.
-fn place(w: &WebviewWindow, app: &AppHandle) {
+pub fn place(w: &WebviewWindow, app: &AppHandle) {
     let s = app.state::<SettingsStore>().get();
     let size = w.outer_size().unwrap_or_default();
     let scale = w.scale_factor().unwrap_or(1.0);
@@ -174,6 +174,10 @@ pub fn on_moved(app: &AppHandle, pos: PhysicalPosition<i32>) {
     if pos.x <= -30000 || pos.y <= -30000 {
         return;
     }
+    // Всплывающая панель (виды B2) стоит у виджета — это не место плавающей панели
+    if crate::views::is_popup(app) {
+        return;
+    }
     let gen = MOVE_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -202,6 +206,13 @@ pub fn overlay_fit(window: WebviewWindow, app: AppHandle, width: f64, height: f6
     let w = width.clamp(120.0, 600.0);
     let h = height.clamp(30.0, 600.0);
     window.set_size(LogicalSize::new(w, h)).map_err(|e| e.to_string())?;
+    // Всплывающая панель выросла/уменьшилась — снова прижать к виджету
+    if crate::views::is_popup(&app) {
+        if window.is_visible().unwrap_or(false) {
+            crate::views::place_popup(&app);
+        }
+        return Ok(());
+    }
     if panel_allowed(&app) && !window.is_visible().unwrap_or(true) {
         window.show().map_err(|e| e.to_string())?;
     }

@@ -5,6 +5,8 @@
 //   ПКМ — меню (Обновить, Настройки, Поверх окон, Вид, Аккаунты, Поддержать, Выход) —
 //   нативное, общее со значком в трее (Rust, tray.rs).
 // В шапке — имя аккаунта claude.ai (B1), котик выключается в настройках.
+// Виды B2 («В панели задач» / «В строке меню»): это же окно — всплывающая панель у виджета.
+//   Её не таскают; прячется сама, когда щёлкнули мимо (Rust), или по Esc.
 (function () {
   "use strict";
   const { invoke } = window.__TAURI__.core;
@@ -13,6 +15,7 @@
 
   let snap = null;
   let auth = { signed_in: false };
+  let popup = false;      // вид не «Поверх окон» — панель всплывающая
 
   const panel = new TokenCat.ui.Panel({
     onAction: (id) => {
@@ -43,6 +46,8 @@
   // Настройки, которые видны на панели: котик
   function applySettings(st) {
     if (!st) return;
+    popup = st.view !== "overlay";
+    document.body.classList.toggle("popup", popup);
     panel.setCat(st.show_cat !== false);
     fit();
   }
@@ -74,11 +79,14 @@
   panel.root.addEventListener("mousedown", (e) => {
     if (e.button !== 0 || e.target.closest("button")) return;
     if (e.detail === 2) { refreshNow(); return; }
-    win.startDragging().catch(() => {});
+    if (!popup) win.startDragging().catch(() => {});
   });
   // Запасной путь для двойного клика (если система отдала его отдельным событием)
   panel.root.addEventListener("dblclick", (e) => {
     if (!e.target.closest("button")) refreshNow();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && popup) win.hide().catch(() => {});
   });
   document.addEventListener("contextmenu", (e) => {
     e.preventDefault();               // вместо меню браузера — своё

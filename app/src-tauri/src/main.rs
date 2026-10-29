@@ -4,6 +4,7 @@
 // S07: вид «Поверх окон» (главное окно).
 // B1: профили (несколько аккаунтов), один экземпляр на профиль, трей, автозапуск,
 //     уведомления, окно настроек, онбординг.
+// B2: виды ОС — панель задач Windows (taskbar.rs) и строка меню macOS (views.rs).
 
 // На Windows не показываем консольное окно ни в релизе, ни в dev-сборке (лог — в файле,
 // «Открыть лог» в настройках). В тестах консоль нужна, чтобы видеть результат.
@@ -23,6 +24,9 @@ mod settings;
 mod shell;
 mod tray;
 mod usage;
+mod views;
+mod icons;
+mod taskbar;
 
 use tauri::Manager;
 
@@ -72,8 +76,12 @@ fn main() {
             let handle = app.handle().clone();
             shell::migrate_onboarding(&handle);
             tauri::async_runtime::spawn(scheduler::run(handle.clone()));
+            // macOS: программа живёт в строке меню, без значка в Dock (как LSUIElement)
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             overlay::setup(&handle);
             tray::setup(&handle);
+            views::init(&handle);
             if let Some(l) = listener {
                 let h = handle.clone();
                 instance::listen(l, profile.id().to_string(), move || shell::on_second_instance(&h));
@@ -93,6 +101,9 @@ fn main() {
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::Moved(pos) if window.label() == auth::MAIN_LABEL => {
                 overlay::on_moved(window.app_handle(), *pos);
+            }
+            tauri::WindowEvent::Focused(f) if window.label() == auth::MAIN_LABEL => {
+                views::on_focus(window.app_handle(), *f);
             }
             tauri::WindowEvent::Destroyed if window.label() == auth::ONBOARDING_LABEL => {
                 shell::onboarding_closed(window.app_handle());

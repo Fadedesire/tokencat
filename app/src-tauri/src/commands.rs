@@ -7,7 +7,7 @@ use tauri::{AppHandle, Manager, WebviewWindow};
 use crate::auth::only_main;
 use crate::profile::Profile;
 use crate::scheduler::{self, Scheduler, Snapshot};
-use crate::settings::{normalize_proxy, SettingsStore, INTERVALS, LANGS, VIEWS};
+use crate::settings::{normalize_proxy, SettingsStore, INTERVALS, LANGS, MENUBAR_STYLES, VIEWS};
 use crate::{alerts, applog, autostart, shell};
 
 type CmdResult<T> = Result<T, String>;
@@ -35,6 +35,8 @@ pub struct SettingsView {
     pub proxy: String,
     pub view: String,
     pub views: Vec<&'static str>,
+    pub menubar_style: String,
+    pub menubar_styles: Vec<&'static str>,
     pub always_on_top: bool,
     pub show_cat: bool,
     pub notify: bool,
@@ -61,6 +63,8 @@ pub fn view(app: &AppHandle) -> SettingsView {
         proxy: s.proxy.unwrap_or_default(),
         view: s.view,
         views: VIEWS.to_vec(),
+        menubar_style: s.menubar_style,
+        menubar_styles: MENUBAR_STYLES.to_vec(),
         always_on_top: s.always_on_top,
         show_cat: s.show_cat,
         notify: s.notify,
@@ -98,6 +102,7 @@ pub struct SettingsPatch {
     /// Пустая строка — выключить прокси
     pub proxy: Option<String>,
     pub view: Option<String>,
+    pub menubar_style: Option<String>,
     pub always_on_top: Option<bool>,
     pub show_cat: Option<bool>,
     pub notify: Option<bool>,
@@ -115,7 +120,12 @@ pub fn settings_set(window: WebviewWindow, app: AppHandle, patch: SettingsPatch)
     }
     if let Some(v) = &patch.view {
         if !VIEWS.contains(&v.as_str()) {
-            return Err("Этот вид появится позже".into());
+            return Err("Этот вид недоступен на этой системе".into());
+        }
+    }
+    if let Some(m) = &patch.menubar_style {
+        if !MENUBAR_STYLES.contains(&m.as_str()) {
+            return Err("Такого вида строки меню нет".into());
         }
     }
     if let Some(l) = &patch.language {
@@ -149,6 +159,9 @@ pub fn settings_set(window: WebviewWindow, app: AppHandle, patch: SettingsPatch)
         if let Some(v) = patch.view {
             s.view = v;
         }
+        if let Some(m) = patch.menubar_style {
+            s.menubar_style = m;
+        }
         if let Some(b) = patch.show_cat {
             s.show_cat = b;
         }
@@ -177,6 +190,12 @@ pub fn settings_set(window: WebviewWindow, app: AppHandle, patch: SettingsPatch)
     // Новый интервал или прокси — сразу проверяем, как работает
     if before.interval_secs != after.interval_secs || before.proxy != after.proxy {
         scheduler::kick(&app);
+    }
+    if before.view != after.view {
+        crate::views::apply(&app);
+    }
+    if before.menubar_style != after.menubar_style {
+        applog::info(format!("строка меню: {}", after.menubar_style));
     }
     shell::settings_changed(&app);
     Ok(view(&app))

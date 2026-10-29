@@ -14,9 +14,14 @@ use serde::{Deserialize, Serialize};
 pub const INTERVALS: [u64; 3] = [30, 60, 120];
 pub const DEFAULT_INTERVAL: u64 = 30;
 
-/// Виды. Пока есть только «Поверх окон»; «В панели задач» (Windows) и «В строке меню» (macOS)
-/// добавит B2 — тогда они появятся здесь.
-pub const VIEWS: [&str; 1] = ["overlay"];
+/// Виды (B2): «Поверх окон» на обеих ОС + свой вид у каждой ОС:
+/// «В панели задач» (Windows) и «В строке меню» (macOS).
+#[cfg(target_os = "macos")]
+pub const VIEWS: [&str; 2] = ["overlay", "menubar"];
+#[cfg(not(target_os = "macos"))]
+pub const VIEWS: [&str; 2] = ["overlay", "taskbar"];
+/// Что показывать в строке меню macOS: 5 ч + неделя, только 5 ч, только значок, кольцо.
+pub const MENUBAR_STYLES: [&str; 4] = ["both", "session", "icon", "ring"];
 /// Языки интерфейса (переводы — B3). "system" — язык системы, иначе английский.
 pub const LANGS: [&str; 10] = ["system", "ru", "en", "es", "pt-BR", "de", "fr", "ja", "ko", "zh-Hans"];
 
@@ -34,8 +39,10 @@ pub struct Settings {
     pub overlay_y: Option<i32>,
     /// Держать панель поверх остальных окон
     pub always_on_top: bool,
-    /// Вид: overlay (см. VIEWS)
+    /// Вид: overlay | taskbar | menubar (см. VIEWS)
     pub view: String,
+    /// Строка меню macOS: both | session | icon | ring (см. MENUBAR_STYLES)
+    pub menubar_style: String,
     /// Показывать котика
     pub show_cat: bool,
     /// Уведомления о 80 % / 100 % 5-часового лимита и о его сбросе
@@ -63,6 +70,7 @@ impl Default for Settings {
             overlay_y: None,
             always_on_top: true,
             view: "overlay".into(),
+            menubar_style: "both".into(),
             show_cat: true,
             notify: true,
             language: "system".into(),
@@ -91,6 +99,9 @@ impl Settings {
         }
         if !VIEWS.contains(&self.view.as_str()) {
             self.view = VIEWS[0].into();
+        }
+        if !MENUBAR_STYLES.contains(&self.menubar_style.as_str()) {
+            self.menubar_style = MENUBAR_STYLES[0].into();
         }
         if !LANGS.contains(&self.language.as_str()) {
             self.language = "system".into();
@@ -295,12 +306,18 @@ mod tests {
             view: "taskbar-из-будущего".into(),
             language: "klingon".into(),
             notify_level: 55,
+            menubar_style: "neon".into(),
             account_name: Some("  roma@example.com ".into()),
             ..Settings::default()
         }
         .sanitized();
         assert_eq!(bad.view, "overlay");
+        assert_eq!(bad.menubar_style, "both");
         assert_eq!(bad.language, "system");
+        // Вид чужой ОС (файл перенесли с Mac на Windows) — тоже «Поверх окон»
+        let foreign = if cfg!(target_os = "macos") { "taskbar" } else { "menubar" };
+        let moved = Settings { view: foreign.into(), ..Settings::default() }.sanitized();
+        assert_eq!(moved.view, "overlay");
         assert_eq!(bad.notify_level, 0);
         assert_eq!(bad.account_name, None);
         assert_eq!(clean_account_name("  Рома  ").as_deref(), Some("Рома"));

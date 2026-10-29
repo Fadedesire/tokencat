@@ -2,7 +2,8 @@
 //
 // - Одно меню на всё: его показывает и значок в трее, и ПКМ по панели (меню собирается
 //   заново при каждом изменении настроек, поэтому галочки всегда верные).
-// - ЛКМ по значку — показать панель (если её закрыли другими окнами).
+// - ЛКМ по значку — показать панель (если её закрыли другими окнами); в видах B2 —
+//   открыть/закрыть всплывающую панель у значка (views.rs). Картинку значка рисует views.rs.
 // - Подсказка значка — имя аккаунта и проценты: «TokenCat · Рома / 5 ч 42% · Неделя 18%».
 //   У каждого профиля свой значок, подсказка помогает их различать.
 
@@ -39,18 +40,20 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
     let refresh = MenuItem::with_id(app, "refresh", "Обновить", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Настройки…", true, None::<&str>)?;
-    let top = CheckMenuItem::with_id(app, "on_top", "Поверх окон", true, s.always_on_top, None::<&str>)?;
+    let popup = s.view != "overlay";
+    // «Поверх окон» есть смысл менять только у плавающей панели
+    let top = CheckMenuItem::with_id(app, "on_top", "Поверх окон", !popup, s.always_on_top, None::<&str>)?;
 
-    // «Вид»: остальные виды появятся в блоке B2
+    // «Вид»: плавающая панель + вид своей ОС (B2)
     let v_overlay = CheckMenuItem::with_id(
         app, "view_overlay", "Плавающая панель", true, s.view == "overlay", None::<&str>,
     )?;
     #[cfg(target_os = "macos")]
-    let other_view = "В строке меню — скоро";
+    let (os_id, os_name) = ("view_menubar", "В строке меню");
     #[cfg(not(target_os = "macos"))]
-    let other_view = "В панели задач — скоро";
-    let v_other = MenuItem::with_id(app, "view_other", other_view, false, None::<&str>)?;
-    let view = Submenu::with_items(app, "Вид", true, &[&v_overlay, &v_other])?;
+    let (os_id, os_name) = ("view_taskbar", "В панели задач");
+    let v_os = CheckMenuItem::with_id(app, os_id, os_name, true, popup, None::<&str>)?;
+    let view = Submenu::with_items(app, "Вид", true, &[&v_overlay, &v_os])?;
 
     // «Аккаунты»: все профили + «Добавить аккаунт»
     let known = shell::known_profiles(app);
@@ -103,10 +106,12 @@ pub fn setup(app: &AppHandle) {
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
+                rect,
                 ..
             } = event
             {
-                shell::show_panel(tray.app_handle());
+                // Плавающая панель — показать; всплывающая — открыть/закрыть у значка (B2)
+                crate::views::on_tray_click(tray.app_handle(), Some(rect));
             }
         });
     if let Some(icon) = app.default_window_icon() {

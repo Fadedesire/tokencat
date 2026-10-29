@@ -19,6 +19,12 @@
     taskbar: "В панели задач",
     menubar: "В строке меню",
   };
+  const MENUBAR_NAMES = {
+    both: "Котик, 5 ч и неделя",
+    session: "Котик и 5 ч",
+    icon: "Только котик",
+    ring: "Кольцо 5 ч",
+  };
 
   let snap = null;   // последний снимок от планировщика
   let auth = { signed_in: false };
@@ -125,24 +131,20 @@
   function renderViews() {
     const box = $("views");
     box.innerHTML = "";
-    // Второй вид зависит от ОС; пока он «скоро» (блок B2)
+    // Второй вид зависит от ОС (B2): панель задач Windows или строка меню macOS
     const all = ["overlay", st.os === "macos" ? "menubar" : "taskbar"];
     for (const v of all) {
       const b = document.createElement("button");
       b.type = "button";
-      const ready = st.views.includes(v);
-      b.disabled = !ready;
+      b.disabled = !st.views.includes(v);
       b.setAttribute("aria-pressed", String(st.view === v));
-      b.textContent = VIEW_NAMES[v] + " ";
-      if (!ready) {
-        const s = document.createElement("span");
-        s.className = "soon";
-        s.textContent = "скоро";
-        b.appendChild(s);
-      }
+      b.textContent = VIEW_NAMES[v];
       b.onclick = () => set({ view: v });
       box.appendChild(b);
     }
+    // «Поверх окон» — только у плавающей панели; стиль строки меню — только на Mac
+    show("on-top-row", st.view === "overlay");
+    show("menubar-row", st.view === "menubar");
   }
 
   function applyView(v) {
@@ -154,6 +156,7 @@
     $("autostart").checked = v.autostart;
     fillSelect($("interval"), v.intervals, v.interval_secs, intervalName);
     fillSelect($("language"), v.languages, v.language, (l) => LANG_NAMES[l] || l);
+    fillSelect($("menubar-style"), v.menubar_styles || [], v.menubar_style, (m) => MENUBAR_NAMES[m] || m);
     // Поле прокси не трогаем, пока в нём пишут
     if (document.activeElement !== $("proxy")) $("proxy").value = v.proxy || "";
     show("remove-row", !v.profile_default);
@@ -178,6 +181,7 @@
   }
 
   $("on-top").onchange = (e) => set({ always_on_top: e.target.checked });
+  $("menubar-style").onchange = (e) => set({ menubar_style: e.target.value });
   $("show-cat").onchange = (e) => set({ show_cat: e.target.checked });
   $("notify").onchange = (e) => set({ notify: e.target.checked });
   $("autostart").onchange = (e) => set({ autostart: e.target.checked });

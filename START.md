@@ -20,7 +20,10 @@ Tauri 2, Rust + чистые HTML/CSS/JS без сборщика и фреймв
   (reqwest + cookie sessionKey), `usage.rs` (разбор /usage, сначала массив `limits`),
   `scheduler.rs` (таймер, откаты, сон, событие `usage-updated`), `settings.rs` (settings.json),
   `applog.rs` (свой лог с маской ключей), `commands.rs` (команды UI), `overlay.rs` (панель
-  «Поверх окон», меню ПКМ, позиция, WS_EX_TOOLWINDOW).
+  «Поверх окон», меню ПКМ, позиция, WS_EX_TOOLWINDOW), `views.rs` (переключение видов,
+  всплывающая панель, значок/строка меню macOS), `taskbar.rs` (виджет в панели задач Windows,
+  Win32+GDI), `icons.rs` (котик, цифры, кольцо в RGBA), `shell.rs`/`tray.rs` (окна, меню),
+  `profile.rs`/`instance.rs` (профили, один экземпляр). `manifest.xml` — манифест Windows.
 - `app/ui/`: `tokens.css`, `components.css/js` (Panel, LimitRow, состояния), `cat.js` (котик на
   canvas), `index.html`+`main.js`+`overlay.css` — панель, `settings.html/js` — временное окно
   настроек (заменяется в B1), `preview.*` — витрина компонентов.

@@ -27,6 +27,22 @@ pub fn known_profiles(app: &AppHandle) -> Vec<profile::Known> {
 pub fn settings_changed(app: &AppHandle) {
     emit_ui(app, "settings-changed", commands::view(app));
     tray::rebuild_menu(app);
+    // Котик и стиль строки меню видны на виджете и значке
+    crate::views::refresh(app);
+}
+
+/// Сменить вид (меню «Вид», настройки, онбординг).
+pub fn set_view(app: &AppHandle, v: &str) -> Result<(), String> {
+    if !crate::settings::VIEWS.contains(&v) {
+        return Err("Этот вид недоступен на этой системе".into());
+    }
+    let store = app.state::<SettingsStore>();
+    if store.get().view == v {
+        return Ok(());
+    }
+    store.update(|s| s.view = v.to_string())?;
+    crate::views::apply(app);
+    Ok(())
 }
 
 /// Онбординг уже пройден или пользователь давно вошёл (обновление со старой версии) —
@@ -52,6 +68,11 @@ pub fn show_panel(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         if !app.state::<SettingsStore>().get().onboarded {
             open_onboarding(&app);
+            return;
+        }
+        // Виды B2: панель всплывает у виджета / значка
+        if crate::views::is_popup(&app) {
+            crate::views::show_popup(&app, None, false);
             return;
         }
         if let Some(w) = app.get_webview_window(MAIN_LABEL) {
@@ -137,6 +158,10 @@ fn window_title(app: &AppHandle, what: &str) -> String {
 }
 
 fn show_main(app: &AppHandle) {
+    // Виды B2: панель появится по клику на виджет/значок — сам виджет уже на месте
+    if crate::views::is_popup(app) {
+        return;
+    }
     if let Some(w) = app.get_webview_window(MAIN_LABEL) {
         let _ = w.show();
     }
@@ -249,8 +274,16 @@ pub fn on_menu(app: &AppHandle, event: MenuEvent) {
             }
             settings_changed(&app);
         }
-        // Пока вид один — пункт только возвращает галочку
-        "view_overlay" => tray::rebuild_menu(&app),
+        "view_overlay" | "view_taskbar" | "view_menubar" => {
+            let v = id.trim_start_matches("view_").to_string();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = set_view(&app, &v) {
+                    applog::warn(e);
+                }
+                // И галочки в меню, и окна настроек узнают о смене
+                settings_changed(&app);
+            });
+        }
         "add_account" => {
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = add_account(&app) {
