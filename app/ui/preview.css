@@ -1,0 +1,25 @@
+/* Только для preview.html */
+html, body { margin: 0; background: #121110; color: var(--tc-text); }
+body { font: 13px/1.4 var(--tc-font); padding: 24px 28px 40px; }
+h1 { font: 600 18px/1.2 var(--tc-font-title); margin: 0 0 4px; }
+h2 { font: 600 13px/1.2 var(--tc-font-title); color: var(--tc-muted); text-transform: uppercase;
+     letter-spacing: .6px; margin: 28px 0 12px; }
+.sub { color: var(--tc-muted); margin: 0; font-size: 12px; }
+
+.swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+.sw { width: 92px; font-size: 11px; color: var(--tc-muted); }
+.sw i { display: block; height: 34px; border-radius: 6px; border: 1px solid var(--tc-border); margin-bottom: 4px; }
+.sw b { display: block; color: var(--tc-text); font-weight: 600; }
+
+.rows-demo { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 22px 16px; }
+.cell { display: flex; flex-direction: column; gap: 6px; }
+.cap { font-size: 11px; color: var(--tc-muted); }
+.cap b { color: var(--tc-text); font-weight: 600; }
+
+.cats { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-end; }
+.catbox { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 11px; color: var(--tc-muted); }
+.catbox .stage { background: var(--tc-bg); border: 1px solid var(--tc-border); border-radius: 8px;
+                 padding: 10px 14px; display: flex; align-items: flex-end; }
+.catbox canvas { image-rendering: pixelated; }

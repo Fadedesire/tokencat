@@ -4,25 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TokenCat</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="components.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Временный экран S04–S05: вход, данные от планировщика, настройки сети. Настоящий вид — S06/S07. -->
+  <!-- Окно S04–S06: панель из общих компонентов + вход, сеть, ручной ключ.
+       Настоящий вид «Поверх окон» — S07, окно настроек — S11. -->
   <main class="card">
-    <header>
-      <canvas id="cat" width="20" height="16" aria-hidden="true"></canvas>
-      <h1>TokenCat</h1>
-    </header>
-
-    <p id="message" class="message">Проверяю вход…</p>
-    <p id="account" class="muted" hidden></p>
-
-    <ul id="limits" class="limits" hidden></ul>
-    <p id="status" class="muted small status"></p>
-    <p id="log-link" class="small status" hidden><a href="#" id="open-log">Открыть лог</a></p>
+    <div id="panel-slot" class="panel-slot"></div>
+    <p id="account" class="muted small" hidden></p>
 
     <div class="actions">
-      <button id="login" class="primary" hidden>Войти в Claude</button>
       <button id="refresh" hidden>Обновить</button>
       <button id="logout" hidden>Выйти</button>
     </div>
@@ -57,6 +50,7 @@
     <p class="muted small footer">Неофициальная программа, не связана с Anthropic.</p>
   </main>
   <script src="cat.js"></script>
+  <script src="components.js"></script>
   <script src="main.js"></script>
 </body>
 </html>

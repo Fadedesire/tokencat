@@ -1,0 +1,141 @@
+/* TokenCat — общие компоненты (S06): панель, шапка, точка статуса, строка лимита, сообщения.
+   Нужен tokens.css. Классы с префиксом tc-, чтобы не пересекаться со стилями окон. */
+
+.tc-panel {
+  position: relative;
+  width: var(--tc-w);
+  background: var(--tc-bg);
+  border: 1px solid var(--tc-border);
+  border-radius: var(--tc-radius);
+  color: var(--tc-text);
+  font: var(--tc-fs)/1.25 var(--tc-font);
+  padding-bottom: 6px;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+/* ---- Шапка: название, точка статуса, время, котик на разделителе ---- */
+.tc-head {
+  position: relative;
+  height: var(--tc-head-h);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--tc-pad);
+}
+.tc-head::after {               /* разделитель, на нём сидит котик */
+  content: "";
+  position: absolute;
+  left: var(--tc-pad); right: var(--tc-pad); bottom: 0;
+  height: 1px;
+  background: var(--tc-border);
+}
+.tc-title { font: var(--tc-fs)/1 var(--tc-font-title); font-weight: 600; letter-spacing: .1px; }
+.tc-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--tc-muted);
+  flex: none;
+}
+.tc-dot.ok { background: var(--tc-green); }
+.tc-dot.warn { background: var(--tc-yellow); }
+.tc-dot.bad { background: var(--tc-red); }
+.tc-time { color: var(--tc-muted); font-size: var(--tc-fs-small); font-variant-numeric: tabular-nums; }
+.tc-cat {
+  position: absolute;
+  right: 14px;
+  /* лапы стоят на разделителе, ниже линии только ряд контура; --tc-cat-cell задаёт cat.js */
+  bottom: calc(-1 * var(--tc-cat-cell, 2px));
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  pointer-events: none;
+  z-index: 1;               /* поверх линии разделителя */
+}
+
+/* ---- Строка лимита: подпись · полоска · процент · до сброса ---- */
+.tc-rows { padding: 3px 0 0; }
+.tc-row {
+  height: var(--tc-row-h);
+  display: grid;
+  grid-template-columns: 50px 1fr 34px 52px;
+  column-gap: 4px;
+  align-items: center;
+  padding: 0 var(--tc-pad);
+}
+.tc-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-bar {
+  display: block;
+  height: var(--tc-bar-h);
+  border-radius: calc(var(--tc-bar-h) / 2);
+  background: var(--tc-track);
+  overflow: hidden;
+}
+.tc-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--tc-green);
+  transition: width .4s ease;
+}
+.tc-fill.yellow { background: var(--tc-yellow); }
+.tc-fill.red { background: var(--tc-red); }
+.tc-pct { text-align: right; font-variant-numeric: tabular-nums; }
+.tc-until {
+  text-align: right;
+  color: var(--tc-muted);
+  font-size: var(--tc-fs-small);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Данные устарели (ошибка после удачного обновления): цифры есть, но приглушены */
+.tc-stale .tc-fill { opacity: .45; }
+.tc-stale .tc-pct { color: var(--tc-muted); }
+
+/* ---- Сообщение под строками: ошибки, вход, загрузка ---- */
+.tc-msg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px var(--tc-pad) 0;
+  font-size: var(--tc-fs-small);
+  color: var(--tc-muted);
+  min-height: 18px;
+}
+.tc-msg[hidden] { display: none; }
+.tc-msg-text { flex: 1; }
+.tc-msg.warn { color: var(--tc-warn); }
+.tc-msg.bad { color: var(--tc-red); }
+.tc-panel.tc-empty .tc-msg { padding-top: 8px; padding-bottom: 2px; }
+
+.tc-btn {
+  font: 600 var(--tc-fs-small)/1 var(--tc-font);
+  color: var(--tc-text);
+  background: var(--tc-raise);
+  border: 1px solid var(--tc-border-strong);
+  border-radius: 6px;
+  padding: 4px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: none;
+}
+.tc-btn:hover { background: var(--tc-raise-hover); }
+.tc-btn.primary { background: var(--tc-accent); border-color: var(--tc-accent); color: var(--tc-bg); }
+.tc-btn.primary:hover { filter: brightness(1.08); }
+.tc-link {
+  font: inherit; color: var(--tc-accent); background: none; border: 0; padding: 0;
+  cursor: pointer; text-decoration: underline; text-underline-offset: 2px; flex: none;
+}
+
+/* Доля недели по продуктам — необязательная строка */
+.tc-note {
+  padding: 2px var(--tc-pad) 0;
+  color: var(--tc-muted);
+  font-size: var(--tc-fs-small);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tc-note[hidden] { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-fill { transition: none; }
+}

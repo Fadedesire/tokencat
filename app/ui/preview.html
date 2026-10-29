@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TokenCat — превью компонентов</title>
+  <!-- S06: все компоненты во всех состояниях. Открывается прямо в браузере, без Tauri. -->
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="components.css">
+  <link rel="stylesheet" href="preview.css">
+</head>
+<body>
+  <h1>TokenCat · дизайн-система</h1>
+  <p class="sub">Превью компонентов S06. Данные выдуманные, время «до сброса» считается от текущего.</p>
+
+  <h2>Цвета</h2>
+  <div id="swatches" class="swatches"></div>
+
+  <h2>Строка лимита: пороги цвета</h2>
+  <div id="rows" class="rows-demo"></div>
+
+  <h2>Панель «Поверх окон»: состояния</h2>
+  <div id="panels" class="grid"></div>
+
+  <h2>Котик</h2>
+  <div id="cats" class="cats"></div>
+
+  <script src="cat.js"></script>
+  <script src="components.js"></script>
+  <script src="preview.js"></script>
+</body>
+</html>

@@ -1,61 +1,31 @@
-/* Токены цветов из SPEC */
-:root {
-  --bg: #1f1e1d;
-  --text: #f0eee6;
-  --muted: #8f8c84;
-  --accent: #d97757;
-}
+/* Главное окно (временное, до S07/S11): панель из components.css + элементы управления.
+   Цвета — только из tokens.css. */
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+html, body { margin: 0; min-height: 100%; background: var(--tc-bg-deep); color: var(--tc-text); }
 body {
-  font: 14px/1.4 "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  display: grid; place-items: center; user-select: none;
+  font: 13px/1.4 var(--tc-font);
+  display: grid; place-items: start center; user-select: none;
 }
-.card { text-align: center; padding: 16px; }
-h1 { margin: 8px 0 4px; font-size: 20px; font-weight: 600; }
-h1::after { content: ""; display: block; width: 48px; height: 3px; margin: 8px auto 0; background: var(--accent); border-radius: 2px; }
+.card { width: 100%; max-width: 380px; padding: 18px 16px 16px; }
+.panel-slot { display: flex; justify-content: center; }
 p { margin: 6px 0; }
-.muted { color: var(--muted); font-size: 12px; }
-/* Пиксельный котик: масштабируем без размытия */
-#cat { width: 60px; height: 48px; image-rendering: pixelated; }
-
-/* ---- S04: временный экран входа ---- */
-:root { --green: #4cc38a; --yellow: #f5c542; --red: #e5484d; --line: #34322f; }
-body { place-items: start center; }
-.card { width: 100%; max-width: 380px; text-align: left; }
-header { display: flex; align-items: center; gap: 10px; justify-content: center; }
-header h1::after { display: none; }
-#cat { width: 40px; height: 32px; }
-.message { margin: 12px 0 2px; font-size: 15px; text-align: center; }
-.message.expired, .message.error { color: var(--yellow); }
-.message.blocked, .message.offline { color: var(--red); }
-#account { text-align: center; }
+.muted { color: var(--tc-muted); }
 .small { font-size: 12px; }
-.limits { list-style: none; padding: 0; margin: 14px 0; }
-.limits li { display: grid; grid-template-columns: 70px 1fr 44px; align-items: center; gap: 4px 10px; margin-bottom: 10px; }
-.limits .reset { grid-column: 2 / 4; margin-top: -2px; }
-.bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
-.bar i { display: block; height: 100%; border-radius: 4px; }
-.bar i.green { background: var(--green); } .bar i.yellow { background: var(--yellow); } .bar i.red { background: var(--red); }
-.pct { text-align: right; font-variant-numeric: tabular-nums; }
-.actions { display: flex; gap: 8px; justify-content: center; margin: 12px 0; }
-button { font: inherit; color: var(--text); background: #2c2a28; border: 1px solid #45423e; border-radius: 6px; padding: 6px 14px; cursor: pointer; }
-button:hover { background: #363431; }
-button:disabled { opacity: .5; cursor: default; }
-button.primary { background: var(--accent); border-color: var(--accent); color: #1f1e1d; font-weight: 600; }
-details { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
-summary { cursor: pointer; color: var(--muted); font-size: 12px; }
-textarea { width: 100%; font: 12px/1.3 Consolas, "SF Mono", monospace; color: var(--text); background: #171615; border: 1px solid #45423e; border-radius: 6px; padding: 6px; resize: none; user-select: text; margin-top: 6px; }
-code { font-size: 11px; }
-.ok { color: var(--green); } .bad { color: var(--red); }
-.footer { text-align: center; margin-top: 14px; }
+#account { text-align: center; margin-top: 10px; overflow-wrap: anywhere; }
 
-/* ---- S05: статус обновления и настройки сети ---- */
-.status { text-align: center; margin: 2px 0; }
-.status.stale { color: var(--yellow); }
-a { color: var(--accent); }
-.row { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; color: var(--muted); }
-select, input[type=text] { font: 13px/1.3 inherit; color: var(--text); background: #171615; border: 1px solid #45423e; border-radius: 6px; padding: 5px 6px; user-select: text; }
-input[type=text] { font-family: Consolas, "SF Mono", monospace; font-size: 12px; }
-.limits li.stale .bar i { opacity: .45; }
-.breakdown { grid-column: 1 / 4; margin-top: -4px; }
+.actions { display: flex; gap: 8px; justify-content: center; margin: 12px 0; }
+button { font: inherit; color: var(--tc-text); background: var(--tc-raise); border: 1px solid var(--tc-border-strong); border-radius: 6px; padding: 6px 14px; cursor: pointer; }
+button:hover { background: var(--tc-raise-hover); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--tc-accent); border-color: var(--tc-accent); color: var(--tc-bg); font-weight: 600; }
+
+details { margin-top: 8px; border-top: 1px solid var(--tc-border); padding-top: 8px; }
+summary { cursor: pointer; color: var(--tc-muted); font-size: 12px; }
+textarea { width: 100%; font: 12px/1.3 var(--tc-font-mono); color: var(--tc-text); background: var(--tc-bg-deep); border: 1px solid var(--tc-border-strong); border-radius: 6px; padding: 6px; resize: none; user-select: text; margin-top: 6px; }
+code { font-size: 11px; }
+.ok { color: var(--tc-green); } .bad { color: var(--tc-red); }
+.footer { text-align: center; margin-top: 14px; }
+a { color: var(--tc-accent); }
+.row { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; color: var(--tc-muted); }
+select, input[type=text] { font: 13px/1.3 var(--tc-font); color: var(--tc-text); background: var(--tc-bg-deep); border: 1px solid var(--tc-border-strong); border-radius: 6px; padding: 5px 6px; user-select: text; }
+input[type=text] { font-family: var(--tc-font-mono); font-size: 12px; }
