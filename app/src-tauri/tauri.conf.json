@@ -12,14 +12,15 @@
         "label": "main",
         "title": "TokenCat",
         "width": 420,
-        "height": 260,
+        "height": 420,
         "resizable": false,
         "center": true
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'"
-    }
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src ipc: http://ipc.localhost"
+    },
+    "withGlobalTauri": true
   },
   "bundle": {
     "active": true,

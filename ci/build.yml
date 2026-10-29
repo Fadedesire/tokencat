@@ -43,6 +43,10 @@ jobs:
         with:
           workspaces: app/src-tauri -> target
 
+      - name: Unit tests
+        working-directory: app/src-tauri
+        run: cargo test --color never
+
       - name: Install Tauri CLI
         run: npm install --no-audit --no-fund
 

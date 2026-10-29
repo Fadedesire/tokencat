@@ -7,12 +7,39 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- Временный экран S04: вход и проверка сессии. Настоящий вид — S06/S07. -->
   <main class="card">
-    <canvas id="cat" width="20" height="16" aria-hidden="true"></canvas>
-    <h1>TokenCat</h1>
-    <p>Каркас приложения готов. Здесь появятся лимиты.</p>
-    <p class="muted">Неофициальная программа, не связана с Anthropic.</p>
+    <header>
+      <canvas id="cat" width="20" height="16" aria-hidden="true"></canvas>
+      <h1>TokenCat</h1>
+    </header>
+
+    <p id="message" class="message">Проверяю вход…</p>
+    <p id="account" class="muted" hidden></p>
+
+    <ul id="limits" class="limits" hidden></ul>
+
+    <div class="actions">
+      <button id="login" class="primary" hidden>Войти в Claude</button>
+      <button id="refresh" hidden>Обновить</button>
+      <button id="logout" hidden>Выйти</button>
+    </div>
+
+    <details id="advanced">
+      <summary>Продвинутое: вставить ключ вручную</summary>
+      <p class="muted small">Значение cookie <code>sessionKey</code> с claude.ai. Нужен, только если
+        обычный вход не работает.</p>
+      <textarea id="manual" rows="2" spellcheck="false" autocomplete="off"
+        placeholder="sk-ant-sid01-…"></textarea>
+      <div class="actions">
+        <button id="manual-save">Сохранить ключ</button>
+      </div>
+      <p id="manual-msg" class="small" hidden></p>
+    </details>
+
+    <p class="muted small footer">Неофициальная программа, не связана с Anthropic.</p>
   </main>
+  <script src="cat.js"></script>
   <script src="main.js"></script>
 </body>
 </html>

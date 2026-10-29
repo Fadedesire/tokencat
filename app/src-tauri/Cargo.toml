@@ -13,6 +13,11 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2.4", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# HTTP к claude.ai. На Windows native-tls = системный Schannel, на macOS — Security.framework
+reqwest = { version = "0.12", features = ["gzip", "brotli", "json"] }
+tokio = { version = "1", features = ["time"] }
+# Ключ сессии — только в системном хранилище: Credential Manager / Keychain
+keyring = { version = "3", features = ["windows-native", "apple-native"] }
 
 [profile.dev]
 # Свой код собираем быстро, зависимости — с оптимизацией

@@ -1,7 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Права только для локальных окон приложения. Окно claude.ai (S04) доступа к IPC не получает.",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "description": "Права только для главного окна приложения. Окно входа claude.ai (claude-login) доступа к IPC не получает.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default"
+  ]
 }
