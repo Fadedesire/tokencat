@@ -22,7 +22,9 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-use crate::api::{self, LimitLine, OrgInfo};
+use crate::api::{self, OrgInfo};
+use crate::settings::SettingsStore;
+use crate::{applog, scheduler};
 use key::SessionKey;
 use store::SecretStore;
 use verdict::Verdict;
@@ -87,47 +89,40 @@ impl Auth {
         self.store.delete()
     }
 
-    fn org(&self) -> Option<OrgInfo> {
+    pub fn org(&self) -> Option<OrgInfo> {
         self.org.lock().unwrap().clone()
     }
 
-    fn set_org(&self, o: OrgInfo) {
+    pub fn set_org(&self, o: OrgInfo) {
         *self.org.lock().unwrap() = Some(o);
     }
 }
 
 // ---------- Что показываем главному окну ----------
 
-/// Состояние для UI. Ключ сюда попадает только маской.
+/// Состояние входа для UI. Ключ сюда попадает только маской.
+/// Проценты и ошибки сети приходят отдельно — от планировщика (событие `usage-updated`).
 #[derive(Debug, Clone, Serialize)]
 pub struct AuthStatus {
-    /// signed_out | signed_in | expired | blocked | offline | error
-    pub state: &'static str,
-    pub message: String,
+    pub signed_in: bool,
     pub masked: Option<String>,
-    pub org_name: Option<String>,
-    pub limits: Vec<LimitLine>,
+    /// Ошибка чтения системного хранилища, если была
+    pub error: Option<String>,
 }
 
 /// Состояние UI по вердикту запроса.
 pub fn state_for(v: Verdict) -> &'static str {
     match v {
-        Verdict::Ok => "signed_in",
+        Verdict::Ok => "ok",
         Verdict::SessionExpired => "expired",
         Verdict::Blocked => "blocked",
-        Verdict::Offline => "offline",
+        Verdict::Offline | Verdict::Proxy => "offline",
         Verdict::RateLimited | Verdict::ServerError | Verdict::Unexpected => "error",
     }
 }
 
-fn signed_out() -> AuthStatus {
-    AuthStatus {
-        state: "signed_out",
-        message: "Вы не вошли в claude.ai".into(),
-        masked: None,
-        org_name: None,
-        limits: vec![],
-    }
+fn proxy(app: &AppHandle) -> Option<String> {
+    app.state::<SettingsStore>().get().proxy
 }
 
 /// Событие для главного окна. Секретов внутри нет.
@@ -143,7 +138,7 @@ fn notify(app: &AppHandle, kind: &'static str, message: Option<String>) {
 }
 
 /// Команды разрешены только главному окну приложения (не окну claude.ai).
-fn only_main(w: &WebviewWindow) -> CmdResult<()> {
+pub(crate) fn only_main(w: &WebviewWindow) -> CmdResult<()> {
     if w.label() == MAIN_LABEL {
         Ok(())
     } else {
@@ -153,52 +148,15 @@ fn only_main(w: &WebviewWindow) -> CmdResult<()> {
 
 // ---------- Команды ----------
 
-/// Текущее состояние входа + свежие проценты (временный экран S04; в S05 — планировщик).
+/// Текущее состояние входа (без сети: только системное хранилище).
 #[tauri::command]
 pub async fn auth_status(window: WebviewWindow, app: AppHandle) -> CmdResult<AuthStatus> {
     only_main(&window)?;
-    let auth = app.state::<Auth>();
-    let key = match auth.current_key() {
-        Ok(Some(k)) => k,
-        Ok(None) => return Ok(signed_out()),
-        Err(e) => {
-            return Ok(AuthStatus {
-                state: "error",
-                message: e,
-                ..signed_out()
-            })
-        }
-    };
-    let masked = Some(key.masked());
-
-    let fail = |f: api::Failure, org_name: Option<String>| AuthStatus {
-        state: state_for(f.verdict),
-        message: f.verdict.user_message().to_string(),
-        masked: masked.clone(),
-        org_name,
-        limits: vec![],
-    };
-
-    let org = match auth.org() {
-        Some(o) => o,
-        None => match api::verify(&key, None).await {
-            Ok(o) => {
-                auth.set_org(o.clone());
-                o
-            }
-            Err(f) => return Ok(fail(f, None)),
-        },
-    };
-    match api::usage_preview(&key, &org.uuid).await {
-        Ok(limits) => Ok(AuthStatus {
-            state: "signed_in",
-            message: Verdict::Ok.user_message().into(),
-            masked: masked.clone(),
-            org_name: org.name,
-            limits,
-        }),
-        Err(f) => Ok(fail(f, org.name)),
-    }
+    Ok(match app.state::<Auth>().current_key() {
+        Ok(Some(k)) => AuthStatus { signed_in: true, masked: Some(k.masked()), error: None },
+        Ok(None) => AuthStatus { signed_in: false, masked: None, error: None },
+        Err(e) => AuthStatus { signed_in: false, masked: None, error: Some(e) },
+    })
 }
 
 /// Открыть окно входа claude.ai и ждать появления сессии.
@@ -278,13 +236,15 @@ async fn watch_login(app: &AppHandle) {
         if rejected.as_ref() == Some(&k) {
             continue;
         }
-        match api::verify(&k, org_hint.as_deref()).await {
+        match api::verify(&k, org_hint.as_deref(), proxy(app).as_deref()).await {
             Ok(org) => {
                 let auth = app.state::<Auth>();
                 match auth.set_key(k, Some(org)) {
                     Ok(()) => {
                         let _ = w.destroy();
+                        applog::info("вход выполнен");
                         notify(app, "signed_in", None);
+                        scheduler::kick(app);
                     }
                     Err(e) => notify(app, "problem", Some(e)),
                 }
@@ -314,7 +274,9 @@ pub async fn auth_logout(window: WebviewWindow, app: AppHandle) -> CmdResult<()>
     // Данные webview общие для всех окон приложения: чистим через главное окно.
     // Так при следующем «Войти» claude.ai снова спросит логин.
     window.clear_all_browsing_data().map_err(err)?;
+    applog::info("выход из аккаунта");
     notify(&app, "signed_out", None);
+    scheduler::kick(&app);
     Ok(())
 }
 
@@ -327,11 +289,13 @@ pub async fn auth_set_manual_key(
 ) -> CmdResult<String> {
     only_main(&window)?;
     let k = SessionKey::from_user_input(&value).map_err(|e| e.user_message().to_string())?;
-    match api::verify(&k, None).await {
+    match api::verify(&k, None, proxy(&app).as_deref()).await {
         Ok(org) => {
             let masked = k.masked();
             app.state::<Auth>().set_key(k, Some(org))?;
+            applog::info("ключ введён вручную и принят");
             notify(&app, "signed_in", None);
+            scheduler::kick(&app);
             Ok(masked)
         }
         Err(f) if f.verdict == Verdict::SessionExpired => {
@@ -376,23 +340,19 @@ mod tests {
 
     #[test]
     fn states_for_ui() {
-        assert_eq!(state_for(Verdict::Ok), "signed_in");
+        assert_eq!(state_for(Verdict::Ok), "ok");
         assert_eq!(state_for(Verdict::SessionExpired), "expired");
         assert_eq!(state_for(Verdict::Blocked), "blocked");
         assert_eq!(state_for(Verdict::Offline), "offline");
+        assert_eq!(state_for(Verdict::Proxy), "offline");
         assert_eq!(state_for(Verdict::RateLimited), "error");
+        assert_eq!(state_for(Verdict::Unexpected), "error");
     }
 
     #[test]
     fn status_never_contains_secret() {
         let k = SessionKey::from_trusted(GOOD).unwrap();
-        let s = AuthStatus {
-            state: "signed_in",
-            message: String::new(),
-            masked: Some(k.masked()),
-            org_name: None,
-            limits: vec![],
-        };
+        let s = AuthStatus { signed_in: true, masked: Some(k.masked()), error: None };
         let json = serde_json::to_string(&s).unwrap();
         assert!(!json.contains("AbCdEfGh"));
     }
