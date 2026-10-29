@@ -1,0 +1,28 @@
+[package]
+name = "tokencat"
+version = "0.1.0"
+description = "TokenCat — трекер лимитов для Claude (неофициальный)"
+edition = "2021"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Версии те же, что прошли спайк S02 на ПК пользователя
+tauri = { version = "2.4", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.dev]
+# Свой код собираем быстро, зависимости — с оптимизацией
+[profile.dev.package."*"]
+opt-level = 1
+
+[profile.release]
+# Лёгкость (SPEC): маленький exe важнее пары секунд сборки
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

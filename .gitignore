@@ -1,0 +1,32 @@
+# Сборки Rust и Node
+target/
+node_modules/
+app/src-tauri/gen/schemas/
+app/spike/src-tauri/gen/schemas/
+
+# Результаты сборки и логи (локальные)
+dist/
+logs/
+*.log
+app/spike/build-log.txt
+tools-report.txt
+
+# Может содержать идентификаторы аккаунта
+app/spike/spike-report.json
+
+# Служебные файлы для git-sync.bat
+tools/commit-msg.txt
+tools/remote.txt
+
+# Секреты — никогда в репозиторий
+*.key
+*.pem
+.env
+.env.*
+
+# ОС и редакторы
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>TokenCat — спайк S02</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 18px; background: #1b1b1f; color: #e8e6e3;
+         font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: #9a978f; margin: 0 0 14px; }
+  button { background: #2c2c33; color: #e8e6e3; border: 1px solid #44444d; border-radius: 6px;
+           padding: 7px 12px; font: inherit; cursor: pointer; margin: 0 6px 6px 0; }
+  button.main { background: #d97a3a; border-color: #d97a3a; color: #1b1b1f; font-weight: 600; }
+  button:disabled { opacity: .45; cursor: default; }
+  .card { background: #24242a; border: 1px solid #34343c; border-radius: 8px; padding: 12px; margin: 10px 0; }
+  .card h2 { font-size: 14px; margin: 0 0 8px; }
+  .ok { color: #7bd88f; } .bad { color: #ff7b72; } .warn { color: #e3b341; }
+  .bar { height: 8px; background: #34343c; border-radius: 4px; overflow: hidden; margin: 3px 0 8px; }
+  .bar > i { display: block; height: 100%; background: #d97a3a; }
+  .row { display: flex; justify-content: space-between; }
+  .muted { color: #9a978f; font-size: 12px; }
+  pre { white-space: pre-wrap; word-break: break-all; font: 12px/1.4 Consolas, monospace;
+        color: #b9b6ae; max-height: 160px; overflow: auto; margin: 6px 0 0; }
+</style>
+</head>
+<body>
+  <h1>TokenCat · спайк S02</h1>
+  <p class="sub">Проверка: вход без ключей и получение лимитов.</p>
+
+  <button class="main" id="login">1. Войти в claude.ai</button>
+  <button id="run" disabled>2. Запросить лимиты</button>
+  <button id="toggle" disabled>Показать окно claude.ai</button>
+  <button id="reset">Сбросить вход</button>
+
+  <div class="card"><h2>Сессия</h2><div id="session" class="muted">Нажмите «Войти», войдите в открывшемся окне (Google или почта). Программа сама увидит вход.</div></div>
+  <div class="card"><h2>Способ A — нативный клиент</h2><div id="native" class="muted">—</div></div>
+  <div class="card"><h2>Способ B — fetch внутри окна claude.ai</h2><div id="webview" class="muted">—</div></div>
+  <div class="card"><h2>Отчёт</h2><div id="report" class="muted">Появится после запроса.</div></div>
+
+<script>
+const { invoke } = window.__TAURI__.core;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+let session = null, polling = null, loginShown = true, autoRan = false;
+
+const WINDOWS = [
+  ['five_hour', '5 часов'], ['seven_day', 'Неделя (все модели)'],
+  ['seven_day_sonnet', 'Неделя Sonnet'], ['seven_day_opus', 'Неделя Opus'],
+];
+
+function fmtReset(iso) {
+  if (!iso) return '';
+  const d = new Date(iso), mins = Math.round((d - Date.now()) / 60000);
+  const left = mins < 60 ? `${mins} мин` : mins < 1440 ? `${Math.floor(mins / 60)} ч ${mins % 60} мин` : `${Math.floor(mins / 1440)} д ${Math.floor(mins % 1440 / 60)} ч`;
+  return `сброс через ${left} (${d.toLocaleString('ru-RU', { weekday: 'short', hour: '2-digit', minute: '2-digit' })})`;
+}
+
+function renderReport(el, r) {
+  if (typeof r === 'string') { el.innerHTML = `<span class="bad">Ошибка: ${esc(r)}</span>`; return; }
+  let h = '';
+  const ok = r.usage && r.usage_status === 200;
+  h += ok ? `<div class="ok">✔ Работает · ${r.ms} мс</div>` : `<div class="bad">✘ Не получилось · ${r.ms ?? '?'} мс</div>`;
+  h += `<div class="muted">organizations: ${r.orgs_status ?? '—'} · организаций: ${r.org_count ?? '—'} · usage: ${r.usage_status ?? '—'}</div>`;
+  if (r.cloudflare) h += `<div class="warn">Похоже на блокировку Cloudflare (регион/VPN).</div>`;
+  if (r.error) h += `<div class="bad">${esc(r.error)}</div>`;
+  if (ok) {
+    for (const [k, name] of WINDOWS) {
+      const w = r.usage[k];
+      if (!w || w.utilization == null) continue;
+      const p = Math.round(w.utilization);
+      h += `<div class="row"><span>${name}</span><b>${p}%</b></div>
+            <div class="bar"><i style="width:${Math.min(100, p)}%"></i></div>
+            <div class="muted" style="margin:-4px 0 8px">${fmtReset(w.resets_at)}</div>`;
+    }
+    const keys = Object.keys(r.usage).join(', ');
+    h += `<div class="muted">Ключи ответа: ${esc(keys)}</div>`;
+  }
+  if (r.body_snippet) h += `<pre>${esc(r.body_snippet)}</pre>`;
+  el.innerHTML = h;
+}
+
+async function checkSession() {
+  try {
+    const s = await invoke('check_session');
+    session = s;
+    if (s.found) {
+      $('session').innerHTML = `<span class="ok">✔ Сессия найдена</span><br>sessionKey: ${esc(s.masked)}<br>
+        <span class="muted">Окно на: ${esc(s.current_url)} · cookie: ${esc(s.cookie_names.join(', '))}</span>`;
+      $('run').disabled = false;
+      if (!autoRan && s.current_url && s.current_url.startsWith('claude.ai') && !s.current_url.startsWith('claude.ai/login')) {
+        autoRan = true;
+        await invoke('show_login', { visible: false }); loginShown = false; updToggle();
+        runAll();
+      }
+    } else {
+      $('session').innerHTML = `<span class="warn">Ждём вход…</span> <span class="muted">Окно на: ${esc(s.current_url)}</span>`;
+    }
+  } catch (e) { /* окно ещё не готово */ }
+}
+
+function updToggle() { $('toggle').disabled = false; $('toggle').textContent = loginShown ? 'Спрятать окно claude.ai' : 'Показать окно claude.ai'; }
+
+async function runAll() {
+  $('run').disabled = true;
+  $('native').textContent = 'Запрашиваю…'; $('webview').textContent = 'Запрашиваю…';
+  let a, b;
+  try { a = await invoke('fetch_native'); } catch (e) { a = String(e); }
+  renderReport($('native'), a);
+  try { b = await invoke('fetch_webview'); } catch (e) { b = String(e); }
+  renderReport($('webview'), b);
+  const report = {
+    when: new Date().toISOString(),
+    user_agent: navigator.userAgent,
+    session_found: !!(session && session.found),
+    cookie_names: session ? session.cookie_names : [],
+    native: a, webview: b,
+  };
+  try { $('report').textContent = 'Сохранён: ' + await invoke('save_report', { report }); }
+  catch (e) { $('report').textContent = 'Не удалось сохранить: ' + e; }
+  $('run').disabled = false;
+}
+
+$('login').onclick = async () => {
+  try { await invoke('open_login'); loginShown = true; updToggle(); } catch (e) { $('session').textContent = 'Ошибка: ' + e; return; }
+  autoRan = false;
+  clearInterval(polling);
+  polling = setInterval(checkSession, 2000);
+};
+$('run').onclick = runAll;
+$('toggle').onclick = async () => { loginShown = !loginShown; await invoke('show_login', { visible: loginShown }).catch(() => {}); updToggle(); };
+$('reset').onclick = async () => {
+  clearInterval(polling); await invoke('reset_login').catch(() => {});
+  session = null; autoRan = false; $('run').disabled = true; $('toggle').disabled = true;
+  $('session').textContent = 'Вход сброшен.'; $('native').textContent = '—'; $('webview').textContent = '—';
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+[package]
+name = "tokencat-spike"
+version = "0.0.1"
+description = "S02: проверка входа в claude.ai и получения лимитов"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# 2.4+ нужен ради cookies_for_url и eval_with_callback
+tauri = { version = "2.4", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# На Windows native-tls = системный Schannel, на macOS — Security.framework (без OpenSSL)
+reqwest = { version = "0.12", features = ["gzip", "brotli", "json"] }
+tokio = { version = "1", features = ["time"] }
+
+[profile.dev]
+# Зависимости собираем с оптимизацией, свой код — быстро
+[profile.dev.package."*"]
+opt-level = 1

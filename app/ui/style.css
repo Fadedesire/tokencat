@@ -1,0 +1,20 @@
+/* Токены цветов из SPEC */
+:root {
+  --bg: #1f1e1d;
+  --text: #f0eee6;
+  --muted: #8f8c84;
+  --accent: #d97757;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+body {
+  font: 14px/1.4 "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  display: grid; place-items: center; user-select: none;
+}
+.card { text-align: center; padding: 16px; }
+h1 { margin: 8px 0 4px; font-size: 20px; font-weight: 600; }
+h1::after { content: ""; display: block; width: 48px; height: 3px; margin: 8px auto 0; background: var(--accent); border-radius: 2px; }
+p { margin: 6px 0; }
+.muted { color: var(--muted); font-size: 12px; }
+/* Пиксельный котик: масштабируем без размытия */
+#cat { width: 60px; height: 48px; image-rendering: pixelated; }

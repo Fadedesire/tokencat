@@ -1,0 +1,14 @@
+{
+  "name": "tokencat",
+  "private": true,
+  "version": "0.1.0",
+  "description": "TokenCat — трекер лимитов для Claude (неофициальный)",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
