@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TokenCat — настройки</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="components.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Временное окно настроек (S07): та же панель + вход/выход, сеть, ручной ключ.
+       Открывается из меню панели (ПКМ → «Настройки…»). Полноценные настройки — S11. -->
+  <main class="card">
+    <div id="panel-slot" class="panel-slot"></div>
+    <p id="account" class="muted small" hidden></p>
+
+    <div class="actions">
+      <button id="refresh" hidden>Обновить</button>
+      <button id="logout" hidden>Выйти</button>
+    </div>
+
+    <details id="network">
+      <summary>Обновление и сеть</summary>
+      <label class="row small">Обновлять каждые
+        <select id="interval"></select>
+      </label>
+      <label class="row small">Прокси (необязательно)
+        <input id="proxy" type="text" spellcheck="false" autocomplete="off"
+          placeholder="127.0.0.1:10808 или socks5://127.0.0.1:1080">
+      </label>
+      <div class="actions">
+        <button id="net-save">Сохранить</button>
+      </div>
+      <p id="net-msg" class="small" hidden></p>
+    </details>
+
+    <details id="advanced">
+      <summary>Продвинутое: вставить ключ вручную</summary>
+      <p class="muted small">Значение cookie <code>sessionKey</code> с claude.ai. Нужен, только если
+        обычный вход не работает.</p>
+      <textarea id="manual" rows="2" spellcheck="false" autocomplete="off"
+        placeholder="sk-ant-sid01-…"></textarea>
+      <div class="actions">
+        <button id="manual-save">Сохранить ключ</button>
+      </div>
+      <p id="manual-msg" class="small" hidden></p>
+    </details>
+
+    <p class="muted small footer">Неофициальная программа, не связана с Anthropic.</p>
+  </main>
+  <script src="cat.js"></script>
+  <script src="components.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

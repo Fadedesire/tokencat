@@ -6,49 +6,12 @@
   <title>TokenCat</title>
   <link rel="stylesheet" href="tokens.css">
   <link rel="stylesheet" href="components.css">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="overlay.css">
 </head>
 <body>
-  <!-- Окно S04–S06: панель из общих компонентов + вход, сеть, ручной ключ.
-       Настоящий вид «Поверх окон» — S07, окно настроек — S11. -->
-  <main class="card">
-    <div id="panel-slot" class="panel-slot"></div>
-    <p id="account" class="muted small" hidden></p>
-
-    <div class="actions">
-      <button id="refresh" hidden>Обновить</button>
-      <button id="logout" hidden>Выйти</button>
-    </div>
-
-    <details id="network">
-      <summary>Обновление и сеть</summary>
-      <label class="row small">Обновлять каждые
-        <select id="interval"></select>
-      </label>
-      <label class="row small">Прокси (необязательно)
-        <input id="proxy" type="text" spellcheck="false" autocomplete="off"
-          placeholder="127.0.0.1:10808 или socks5://127.0.0.1:1080">
-      </label>
-      <div class="actions">
-        <button id="net-save">Сохранить</button>
-      </div>
-      <p id="net-msg" class="small" hidden></p>
-    </details>
-
-    <details id="advanced">
-      <summary>Продвинутое: вставить ключ вручную</summary>
-      <p class="muted small">Значение cookie <code>sessionKey</code> с claude.ai. Нужен, только если
-        обычный вход не работает.</p>
-      <textarea id="manual" rows="2" spellcheck="false" autocomplete="off"
-        placeholder="sk-ant-sid01-…"></textarea>
-      <div class="actions">
-        <button id="manual-save">Сохранить ключ</button>
-      </div>
-      <p id="manual-msg" class="small" hidden></p>
-    </details>
-
-    <p class="muted small footer">Неофициальная программа, не связана с Anthropic.</p>
-  </main>
+  <!-- Вид «Поверх окон» (S07): только панель. Окно прозрачное, без рамки; перетаскивание,
+       двойной клик и ПКМ — в main.js. Вход/сеть/ключ — в окне настроек (settings.html). -->
+  <div id="slot"></div>
   <script src="cat.js"></script>
   <script src="components.js"></script>
   <script src="main.js"></script>

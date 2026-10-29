@@ -1,7 +1,7 @@
 // TokenCat — точка входа.
 // S04: вход в claude.ai и хранение сессии.
 // S05: клиент данных (api, usage), планировщик, настройки сети, лог-файл.
-// Виды отображения — S07+.
+// S07: вид «Поверх окон» (главное окно) + временное окно настроек.
 
 // В релизной сборке на Windows не показываем консольное окно
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -10,6 +10,7 @@ mod api;
 mod applog;
 mod auth;
 mod commands;
+mod overlay;
 mod scheduler;
 mod settings;
 mod usage;
@@ -39,7 +40,16 @@ fn main() {
             ));
             app.manage(store);
             tauri::async_runtime::spawn(scheduler::run(app.handle().clone()));
+            overlay::setup(app.handle());
             Ok(())
+        })
+        .on_menu_event(|app, event| overlay::on_menu(app, event))
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Moved(pos) = event {
+                if window.label() == auth::MAIN_LABEL {
+                    overlay::on_moved(window.app_handle(), *pos);
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             auth::auth_status,
@@ -50,7 +60,9 @@ fn main() {
             commands::usage_refresh,
             commands::settings_get,
             commands::settings_set,
-            commands::open_log
+            commands::open_log,
+            overlay::overlay_fit,
+            overlay::overlay_menu
         ])
         .run(tauri::generate_context!())
         .expect("не удалось запустить TokenCat");

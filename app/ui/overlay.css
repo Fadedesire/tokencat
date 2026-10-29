@@ -1,0 +1,13 @@
+/* Вид «Поверх окон» (S07). Окно прозрачное: видна только панель со скруглёнными углами.
+   Размер окна = размер панели (main.js сообщает его в Rust). */
+*, *::before, *::after { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+}
+#slot { display: inline-block; vertical-align: top; }
+/* Вся панель — «ручка» для перетаскивания */
+.tc-panel { cursor: default; }
+.tc-panel button { cursor: pointer; }

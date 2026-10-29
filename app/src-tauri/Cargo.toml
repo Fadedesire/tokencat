@@ -10,7 +10,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # Версии те же, что прошли спайк S02 на ПК пользователя
-tauri = { version = "2.4", features = [] }
+# macos-private-api — прозрачное окно «Поверх окон» на macOS (S07); в Mac App Store не идём
+tauri = { version = "2.4", features = ["macos-private-api"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # HTTP к claude.ai. На Windows native-tls = системный Schannel, на macOS — Security.framework
@@ -19,6 +20,10 @@ reqwest = { version = "0.12", features = ["gzip", "brotli", "json", "socks"] }
 tokio = { version = "1", features = ["time", "sync", "macros"] }
 # Ключ сессии — только в системном хранилище: Credential Manager / Keychain
 keyring = { version = "3", features = ["windows-native", "apple-native"] }
+
+# Windows: убрать панель из Alt+Tab (WS_EX_TOOLWINDOW). Версия уже есть в Cargo.lock.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 
 [profile.dev]
 # Свой код собираем быстро, зависимости — с оптимизацией

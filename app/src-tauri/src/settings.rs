@@ -22,11 +22,24 @@ pub struct Settings {
     pub proxy: Option<String>,
     /// uuid организации с прошлого запуска (как cookie lastActiveOrg)
     pub last_org: Option<String>,
+    /// Вид «Поверх окон» (S07): левый верхний угол панели в физических пикселях
+    /// виртуального экрана. None — поставить в угол основного монитора.
+    pub overlay_x: Option<i32>,
+    pub overlay_y: Option<i32>,
+    /// Держать панель поверх остальных окон
+    pub always_on_top: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { interval_secs: DEFAULT_INTERVAL, proxy: None, last_org: None }
+        Settings {
+            interval_secs: DEFAULT_INTERVAL,
+            proxy: None,
+            last_org: None,
+            overlay_x: None,
+            overlay_y: None,
+            always_on_top: true,
+        }
     }
 }
 
@@ -39,6 +52,11 @@ impl Settings {
         self.proxy = self.proxy.as_deref().and_then(|p| normalize_proxy(p).ok().flatten());
         if !self.last_org.as_deref().is_some_and(is_uuid_like) {
             self.last_org = None;
+        }
+        // Позиция имеет смысл только целиком
+        if self.overlay_x.is_none() || self.overlay_y.is_none() {
+            self.overlay_x = None;
+            self.overlay_y = None;
         }
         self
     }
@@ -163,6 +181,7 @@ mod tests {
             interval_secs: 7,
             proxy: Some("не прокси".into()),
             last_org: Some("../../etc".into()),
+            ..Settings::default()
         }
         .sanitized();
         assert_eq!(s, Settings::default());
@@ -170,6 +189,7 @@ mod tests {
             interval_secs: 120,
             proxy: Some("127.0.0.1:2080".into()),
             last_org: Some("58a28114-c56e-4a29-af8e-c95d508f8ad3".into()),
+            ..Settings::default()
         }
         .sanitized();
         assert_eq!(ok.interval_secs, 120);

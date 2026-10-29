@@ -11,16 +11,26 @@
       {
         "label": "main",
         "title": "TokenCat",
-        "width": 420,
-        "height": 540,
+        "url": "index.html",
+        "width": 252,
+        "height": 80,
         "resizable": false,
-        "center": true
+        "maximizable": false,
+        "minimizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": false
       }
     ],
     "security": {
       "csp": "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src ipc: http://ipc.localhost"
     },
-    "withGlobalTauri": true
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,

@@ -16,14 +16,14 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tokio::sync::Notify;
 
 use crate::api::{Failure, Net, OrgInfo};
 use crate::applog;
 use crate::auth::key::SessionKey;
 use crate::auth::verdict::Verdict;
-use crate::auth::{state_for, Auth, MAIN_LABEL};
+use crate::auth::{emit_ui, state_for, Auth};
 use crate::settings::{proxy_for_log, Settings, SettingsStore};
 use crate::usage::Usage;
 
@@ -125,7 +125,7 @@ impl Scheduler {
             f(&mut g);
             g.clone()
         };
-        let _ = app.emit_to(MAIN_LABEL, "usage-updated", s);
+        emit_ui(app, "usage-updated", s);
     }
 }
 

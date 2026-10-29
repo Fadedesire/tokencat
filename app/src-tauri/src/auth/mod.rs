@@ -31,6 +31,19 @@ use verdict::Verdict;
 
 pub const MAIN_LABEL: &str = "main";
 pub const LOGIN_LABEL: &str = "claude-login";
+/// Временное окно настроек (S07; полноценное — S11). Права те же, что у главного.
+pub const SETTINGS_LABEL: &str = "settings";
+/// Окна приложения, которым можно вызывать команды и получать события
+pub const UI_LABELS: [&str; 2] = [MAIN_LABEL, SETTINGS_LABEL];
+
+/// Событие всем окнам приложения (но не окну claude.ai).
+pub(crate) fn emit_ui<S: Serialize + Clone>(app: &AppHandle, event: &str, payload: S) {
+    for l in UI_LABELS {
+        if app.get_webview_window(l).is_some() {
+            let _ = app.emit_to(l, event, payload.clone());
+        }
+    }
+}
 /// Сколько ждём, пока пользователь войдёт, прежде чем перестать опрашивать cookie
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
@@ -134,12 +147,12 @@ struct AuthEvent {
 }
 
 fn notify(app: &AppHandle, kind: &'static str, message: Option<String>) {
-    let _ = app.emit_to(MAIN_LABEL, "auth-changed", AuthEvent { kind, message });
+    emit_ui(app, "auth-changed", AuthEvent { kind, message });
 }
 
-/// Команды разрешены только главному окну приложения (не окну claude.ai).
+/// Команды разрешены только окнам приложения (не окну claude.ai).
 pub(crate) fn only_main(w: &WebviewWindow) -> CmdResult<()> {
-    if w.label() == MAIN_LABEL {
+    if UI_LABELS.contains(&w.label()) {
         Ok(())
     } else {
         Err("forbidden".into())
