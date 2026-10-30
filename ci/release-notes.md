@@ -1,2 +1,2 @@
-- Первая публичная версия: лимиты 5 ч и недели, котик, 9 языков, автообновление.
-- First public release: 5-hour and weekly limits, pixel cat, 9 languages, auto-update.
+- Проверка автообновления: исправлений для пользователей нет, всё как в 0.9.1.
+- Auto-update check: no user-facing changes from 0.9.1.
