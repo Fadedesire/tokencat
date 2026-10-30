@@ -31,6 +31,12 @@ S01–S07 — `docs/archive-2026-10-29/DECISIONS.md`.
   `tools\remote.txt`, оба в .gitignore); CI-файл в `ci\build.yml`, ставит `ci\install-ci.bat`.
 - CI: предупреждение «Node.js 20 deprecated» у actions/*@v4 — обновить мажорные версии при
   следующей правке build.yml.
+- B3 — «нажал — заработало»: до запуска Tauri проверяем WebView2 (`webview_check.rs`,
+  `tauri::webview_version`); нет — окно на языке системы «нужен компонент Windows» со ссылкой
+  на официальный загрузчик Microsoft и выход (иначе portable на старой Win10 молча падал).
+  Данные — в %APPDATA%/%LOCALAPPDATA%, поэтому portable работает из любой папки (проверено
+  из «logs\Проверка папка»). Windows Sandbox на ПК Ромы нет — `tools\sandbox.wsb` на будущее,
+  чистая Win10 — в бете (B5).
 
 ## Вход и секреты
 - S04 — окно `claude-login`: раз в секунду читаем cookie, новый `sessionKey` проверяем

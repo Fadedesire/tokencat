@@ -7,6 +7,8 @@
  "win.settings": "设置",
  "win.welcome": "欢迎",
  "win.login": "登录 claude.ai — TokenCat",
+ "wv2.title": "TokenCat — 需要 Windows 组件",
+ "wv2.body": "TokenCat 需要免费的 Windows 组件 Microsoft Edge WebView2（Windows 11 通常已自带）。\n\n现在从 Microsoft 下载吗？安装完成后请重新启动 TokenCat。",
  "lim.session": "5小时",
  "lim.weekly": "本周",
  "lim.sonnet": "Sonnet",

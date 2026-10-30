@@ -1,0 +1,16 @@
+<Configuration>
+  <!-- B3 п. 4: проверка «нажал — заработало» на чистой Windows (Windows Sandbox).
+       Папка dist видна внутри как «Рабочий стол\Проверка TokenCat» — путь с пробелом
+       и кириллицей, только чтение. Запуск: двойной клик по этому файлу. -->
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>F:\LimitCat\dist</HostFolder>
+      <SandboxFolder>C:\Users\WDAGUtilityAccount\Desktop\Проверка TokenCat</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+  <LogonCommand>
+    <Command>explorer.exe "C:\Users\WDAGUtilityAccount\Desktop\Проверка TokenCat"</Command>
+  </LogonCommand>
+  <MemoryInMB>4096</MemoryInMB>
+</Configuration>

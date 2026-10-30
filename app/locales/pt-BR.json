@@ -7,6 +7,8 @@
  "win.settings": "configurações",
  "win.welcome": "boas-vindas",
  "win.login": "Entrar no claude.ai — TokenCat",
+ "wv2.title": "TokenCat — falta um componente do Windows",
+ "wv2.body": "O TokenCat precisa do Microsoft Edge WebView2, um componente gratuito do Windows (o Windows 11 normalmente já tem).\n\nBaixar agora da Microsoft? Depois de instalar, abra o TokenCat de novo.",
  "lim.session": "5 h",
  "lim.weekly": "Semana",
  "lim.sonnet": "Sonnet",

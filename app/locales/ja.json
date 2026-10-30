@@ -7,6 +7,8 @@
  "win.settings": "設定",
  "win.welcome": "ようこそ",
  "win.login": "claude.ai にログイン — TokenCat",
+ "wv2.title": "TokenCat — Windows コンポーネントが必要です",
+ "wv2.body": "TokenCat には無料の Windows コンポーネント Microsoft Edge WebView2 が必要です（Windows 11 には通常すでに入っています）。\n\n今すぐ Microsoft からダウンロードしますか？インストール後、TokenCat をもう一度起動してください。",
  "lim.session": "5時間",
  "lim.weekly": "週",
  "lim.sonnet": "Sonnet",
