@@ -49,6 +49,12 @@ pub enum Event {
     Menu(i32, i32),
     /// Встроились (true) или перешли на запасной вид (false)
     Embedded(bool),
+    /// Виджет вытянули из панели задач: стать плавающей панелью под курсором (x, y)
+    DragOut(i32, i32),
+    /// Виджет переставили в ряду: новый порядок (сохранить в настройках профиля)
+    Reorder(i32),
+    /// Вытянутый виджет ведёт плавающую панель: поставить её левый верхний угол сюда
+    FollowTo(i32, i32),
 }
 
 // ---------- Размеры (логические пиксели × масштаб) ----------
@@ -157,6 +163,51 @@ pub fn spot(tb: Rect, tray: Option<Rect>, w: i32, h: i32, gap: i32) -> (i32, i32
     }
 }
 
+/// Место виджета в ряду (B2): `order` — порядок (меньше — ближе к трею; по умолчанию
+/// номер профиля × 100, меняется перетаскиванием), `slot` — номер профиля (при равном порядке).
+pub type Key = (i32, u32);
+
+/// Порядок по умолчанию: основной у самого трея, следующие профили — левее.
+pub fn default_order(slot: u32) -> i32 {
+    slot as i32 * 100
+}
+
+/// Сдвиг виджета от трея: сумма размеров тех, кто в ряду ближе к трею.
+/// `others` — (ключ, ширина или высота) виджетов других копий программы.
+pub fn queue_offset(me: Key, others: &[(Key, i32)], gap: i32) -> i32 {
+    others.iter().filter(|(k, _)| *k < me).map(|(_, size)| size + gap).sum()
+}
+
+/// Новый порядок для виджета, отпущенного в точке `cursor` (x для горизонтальной панели,
+/// y для вертикальной). Трей — со стороны больших координат, поэтому все, чей центр дальше
+/// курсора по направлению к трею, остаются ближе к трею. `others` — (порядок, центр).
+pub fn order_at(cursor: i32, others: &[(i32, i32)]) -> i32 {
+    let mut v: Vec<(i32, i32)> = others.to_vec();
+    v.sort();
+    let k = v.iter().filter(|(_, c)| *c > cursor).count();
+    match (k, v.len()) {
+        (_, 0) => 0,
+        (0, _) => v[0].0 - 100,
+        (k, n) if k >= n => v[n - 1].0 + 100,
+        (k, _) => {
+            // Между соседями: k ближайших к трею по порядку — это первые k
+            let (a, b) = (v[k - 1].0, v[k].0);
+            if b - a >= 2 { a + (b - a) / 2 } else { a + 1 }
+        }
+    }
+}
+
+/// Подпись окна виджета: по ней копии программы находят друг друга в панели задач.
+pub fn widget_title(k: Key) -> String {
+    format!("TokenCat:{}:{}", k.0, k.1)
+}
+
+pub fn parse_widget_title(t: &str) -> Option<Key> {
+    let rest = t.strip_prefix("TokenCat:")?;
+    let (o, s) = rest.split_once(':')?;
+    Some((o.parse().ok()?, s.parse().ok()?))
+}
+
 /// Текст процента: «42%», нет данных — «—».
 pub fn pct_text(p: Option<f64>) -> String {
     match p {
@@ -165,15 +216,58 @@ pub fn pct_text(p: Option<f64>) -> String {
     }
 }
 
+// ---------- Анимации (B10) ----------
+
+/// «Шлепок» виджета при появлении, мс
+pub const SPLAT_MS: f64 = 300.0;
+/// Переезд виджета на новое место в ряду, мс
+pub const SLIDE_MS: f64 = 140.0;
+
+/// «Шлепок» (squash & stretch): момент t (0..1) → масштаб картинки по x и по y.
+/// Узкий и вытянутый вверх → сплющенный → чуть вытянутый → норма.
+pub fn splat(t: f64) -> (f64, f64) {
+    const KEYS: [(f64, f64, f64); 4] = [(0.0, 0.45, 1.35), (0.4, 1.16, 0.8), (0.7, 0.96, 1.05), (1.0, 1.0, 1.0)];
+    if t >= 1.0 {
+        return (1.0, 1.0);
+    }
+    let t = t.max(0.0);
+    for k in KEYS.windows(2) {
+        let (a, b) = (k[0], k[1]);
+        if t <= b.0 {
+            let u = (t - a.0) / (b.0 - a.0);
+            let u = u * u * (3.0 - 2.0 * u); // плавно в начале и в конце отрезка
+            return (a.1 + (b.1 - a.1) * u, a.2 + (b.2 - a.2) * u);
+        }
+    }
+    (1.0, 1.0)
+}
+
+/// Полоски заполняются волной слева направо, вторая строка чуть позже первой:
+/// какая доля заполнения видна у строки `row` в момент t (0..1).
+pub fn fill_wave(t: f64, row: usize) -> f64 {
+    let start = 0.2 + 0.15 * row as f64;
+    ease_out(((t - start) / 0.55).clamp(0.0, 1.0))
+}
+
+/// Плавное замедление к концу (cubic ease-out), t 0..1.
+pub fn ease_out(t: f64) -> f64 {
+    let u = 1.0 - t.clamp(0.0, 1.0);
+    1.0 - u * u * u
+}
+
 #[cfg(windows)]
-pub use win::{rect as widget_rect, set_enabled, start, update};
+pub use win::{
+    animations_on, cancel_mode, cursor_pos, left_button_down, order_for_drop, rect as widget_rect, set_enabled,
+    set_order, start, taskbar_rect, update,
+};
 
 #[cfg(windows)]
 mod win {
     use std::cell::Cell;
     use std::ffi::c_void;
-    use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicU32, Ordering};
     use std::sync::{Mutex, OnceLock};
+    use std::time::Instant;
 
     use windows_sys::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, SIZE, WPARAM};
     use windows_sys::Win32::Graphics::Gdi::{
@@ -189,24 +283,37 @@ mod win {
     use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, FindWindowExW, FindWindowW,
-        GetCursorPos, GetMessageW, GetParent, GetWindowRect, IsWindow, KillTimer, LoadCursorW,
+        GetCursorPos, GetMessageW, GetParent, GetWindowRect, GetWindowTextW, IsWindow, IsWindowVisible,
+        KillTimer,
+        LoadCursorW,
         PostMessageW, RegisterClassExW, RegisterWindowMessageW, SetLayeredWindowAttributes, SetTimer,
         UpdateLayeredWindow, ULW_ALPHA,
         SetWindowPos, TranslateMessage, HWND_TOP, IDC_ARROW, LWA_COLORKEY, MSG, SWP_NOACTIVATE,
         SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, WM_APP, WM_DESTROY, WM_ERASEBKGND, WM_LBUTTONUP,
         WM_PAINT, WM_RBUTTONUP, WM_SETTINGCHANGE, WM_THEMECHANGED, WM_TIMER, WNDCLASSEXW,
         WS_CHILD, WS_CLIPSIBLINGS, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_POPUP, WS_VISIBLE,
+        SetWindowTextW, WM_CANCELMODE, WM_CAPTURECHANGED, WM_LBUTTONDOWN, WM_MOUSEMOVE, ShowWindow, SW_HIDE,
+        SystemParametersInfoW, SPI_GETCLIENTAREAANIMATION,
+
     };
 
-    use super::{layout, pct_text, spot, Data, Event, Layout, GAP};
+    use super::{
+        ease_out, fill_wave, layout, order_at, parse_widget_title, pct_text, queue_offset, splat, spot, widget_title,
+        Data, Event, Key, Layout, GAP, SLIDE_MS, SPLAT_MS,
+    };
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, ReleaseCapture, SetCapture, VK_LBUTTON};
     use crate::applog;
     use crate::icons::{self, cat_color, cat_frame, CatFrame, Mood, CAT_H, CAT_W};
     use crate::overlay::Rect;
 
     const WM_APP_ENABLE: u32 = WM_APP + 1;
     const WM_APP_DATA: u32 = WM_APP + 2;
+    /// Порядок в ряду сменился: обновить подпись, встать на место, толкнуть соседей
+    const WM_APP_ORDER: u32 = WM_APP + 3;
     const TIMER_LAYOUT: usize = 1;
     const TIMER_CAT: usize = 2;
+    /// Кадры анимаций (B10), ~60 к/с; работает только пока идёт анимация
+    const TIMER_ANIM: usize = 3;
     /// Сколько секунд подряд без панели задач — и переходим на запасной вид
     const FAIL_LIMIT: u32 = 10;
     const MODE_SOLID: u8 = 0;
@@ -226,6 +333,21 @@ mod win {
     static STARTED: AtomicBool = AtomicBool::new(false);
     static HOST: AtomicIsize = AtomicIsize::new(0);
     static WIDGET: AtomicIsize = AtomicIsize::new(0);
+    /// Номер профиля этой копии (0 — основной) и место в ряду виджетов (см. Key)
+    static SLOT: AtomicU32 = AtomicU32::new(0);
+    static ORDER: AtomicI32 = AtomicI32::new(0);
+    /// Общее сообщение всех копий TokenCat «ряд в панели задач изменился — встань на место»
+    /// (RegisterWindowMessage: одно число для всех процессов)
+    static REFLOW_MSG: AtomicU32 = AtomicU32::new(0);
+    /// Виджет вытянули: окно плавающей панели, которое он ведёт за курсором, и за какую
+    /// точку панель «держат» (см. follow)
+    static FOLLOW: AtomicIsize = AtomicIsize::new(0);
+    static FOLLOW_GX: AtomicI32 = AtomicI32::new(0);
+    static FOLLOW_GY: AtomicI32 = AtomicI32::new(0);
+
+    fn my_key() -> super::Key {
+        (ORDER.load(Ordering::SeqCst), SLOT.load(Ordering::SeqCst))
+    }
 
     /// Состояние, которое трогает только поток виджета (поэтому Cell, без блокировок:
     /// оконные процедуры вызываются повторно изнутри Win32-вызовов).
@@ -242,6 +364,16 @@ mod win {
         tick: Cell<u64>,
         frame: Cell<CatFrame>,
         taskbar_created: Cell<u32>,
+        /// Нажали ЛКМ на виджете: точка экрана и смещение курсора внутри виджета
+        press: Cell<Option<(i32, i32, i32, i32)>>,
+        /// Виджет тащат вдоль панели (перестановка)
+        dragging: Cell<bool>,
+        /// Виджет вытянули, кнопка ещё нажата: ведём плавающую панель (захват мыши у виджета)
+        following: Cell<bool>,
+        /// Идёт «шлепок» появления (B10): когда начался
+        splat: Cell<Option<Instant>>,
+        /// Идёт переезд в ряду (B10): откуда (x, y), куда (x, y), когда начался
+        slide: Cell<Option<(i32, i32, i32, i32, Instant)>>,
     }
 
     thread_local! {
@@ -256,6 +388,11 @@ mod win {
             tick: Cell::new(0),
             frame: Cell::new([[0; CAT_W]; CAT_H]),
             taskbar_created: Cell::new(0),
+            press: Cell::new(None),
+            dragging: Cell::new(false),
+            following: Cell::new(false),
+            splat: Cell::new(None),
+            slide: Cell::new(None),
         };
     }
 
@@ -276,7 +413,9 @@ mod win {
     }
 
     /// Запустить поток виджета (один раз). `cb` получает клики и смену состояния.
-    pub fn start(cb: impl Fn(Event) + Send + Sync + 'static) {
+    pub fn start(slot: u32, order: i32, cb: impl Fn(Event) + Send + Sync + 'static) {
+        SLOT.store(slot, Ordering::SeqCst);
+        ORDER.store(order, Ordering::SeqCst);
         if STARTED.swap(true, Ordering::SeqCst) {
             return;
         }
@@ -369,6 +508,8 @@ mod win {
             let msg = wide("TaskbarCreated");
             let tc = RegisterWindowMessageW(msg.as_ptr());
             L.with(|l| l.taskbar_created.set(tc));
+            let rm = wide("TokenCatTaskbarReflow");
+            REFLOW_MSG.store(RegisterWindowMessageW(rm.as_ptr()), Ordering::SeqCst);
 
             // Невидимое окно верхнего уровня: только оно получает TaskbarCreated и смену темы
             let title = wide("TokenCat taskbar host");
@@ -410,6 +551,8 @@ mod win {
     /// Включили — создать виджет и таймеры; выключили — убрать.
     unsafe fn apply_enabled(host: HWND) {
         if enabled() {
+            // Панель, которую только что вытянули, принесли обратно — ведение заканчиваем
+            stop_follow();
             L.with(|l| l.fails.set(0));
             SetTimer(host, TIMER_LAYOUT, 1000, None);
             SetTimer(host, TIMER_CAT, 125, None);
@@ -417,15 +560,67 @@ mod win {
         } else {
             KillTimer(host, TIMER_LAYOUT);
             KillTimer(host, TIMER_CAT);
-            destroy_widget();
+            if L.with(|l| l.following.get()) {
+                // Виджет ещё держит мышь и ведёт панель: прячем, уберём, когда отпустят
+                let w = WIDGET.load(Ordering::SeqCst);
+                if w != 0 {
+                    ShowWindow(h(w), SW_HIDE);
+                    nudge_neighbours();
+                }
+            } else {
+                destroy_widget();
+            }
             L.with(|l| l.embedded.set(None));
         }
+    }
+
+    /// Закончить ведение панели (кнопку отпустили или панель вернули в панель задач).
+    unsafe fn stop_follow() {
+        if !L.with(|l| l.following.replace(false)) {
+            return;
+        }
+        FOLLOW.store(0, Ordering::SeqCst);
+        ReleaseCapture();
+        // Спрятанный виджет больше не нужен; если вид снова «панель задач» — ensure_widget
+        // создаст новый на нужном месте ряда
+        destroy_widget();
+    }
+
+    /// Прервать системное перетаскивание окна (панель «влетела» в панель задач, дальше её
+    /// ведёт приложение).
+    pub fn cancel_mode(hwnd: isize) {
+        // SAFETY: PostMessage не ждёт; окно — наше
+        unsafe { PostMessageW(h(hwnd), WM_CANCELMODE, 0, 0) };
+    }
+
+    /// Приложение показало плавающую панель для вытянутого виджета: дальше виджет сам двигает
+    /// её за курсором на каждое движение мыши (захват мыши — у него). Системное
+    /// перетаскивание тут не годится: кнопку зажали в панели задач, в чужом потоке ввода.
+    #[allow(dead_code)] // ведение панели теперь в views::watch_drag
+    pub fn follow(panel: isize, gx: i32, gy: i32) {
+        FOLLOW_GX.store(gx, Ordering::SeqCst);
+        FOLLOW_GY.store(gy, Ordering::SeqCst);
+        FOLLOW.store(panel, Ordering::SeqCst);
+    }
+
+    /// Ведомая панель — под курсор. Само окно двигает приложение (Event::FollowTo): оно
+    /// держит в очереди не больше одного переезда и всегда берёт последнюю точку. Если слать
+    /// SetWindowPos на каждое движение мыши (их сотни в секунду), переезды копятся, и панель
+    /// повторяет путь курсора с большим опозданием.
+    unsafe fn follow_move() {
+        if FOLLOW.load(Ordering::SeqCst) == 0 {
+            return;
+        }
+        let (x, y) = cursor_pos();
+        let (gx, gy) = (FOLLOW_GX.load(Ordering::SeqCst), FOLLOW_GY.load(Ordering::SeqCst));
+        emit(Event::FollowTo(x - gx, y - gy));
     }
 
     unsafe fn destroy_widget() {
         let w = WIDGET.swap(0, Ordering::SeqCst);
         if w != 0 {
             DestroyWindow(h(w));
+            nudge_neighbours();
         }
     }
 
@@ -488,12 +683,27 @@ mod win {
         let vertical = tbr.h > tbr.w;
         let thick = if vertical { tbr.w } else { tbr.h };
         let lay = layout(scale, thick, vertical, data().cat);
-        let (x, y) = spot(tbr, tray, lay.w, lay.h, (GAP * scale).round() as i32);
+        let gap = (GAP * scale).round() as i32;
+        let (x, y) = spot(tbr, tray, lay.w, lay.h, gap);
+        // Виджеты других профилей в этой же панели — встаём в очередь за ними
+        let others: Vec<(Key, i32)> =
+            neighbours(tb, w).into_iter().map(|(k, r)| (k, if vertical { r.h } else { r.w })).collect();
+        let shift = queue_offset(my_key(), &others, gap);
+        let (x, y) = if vertical { (x, (y - shift).max(0)) } else { ((x - shift).max(0), y) };
 
         if w.is_null() {
             // Масштаб нужен уже для первой картинки
             L.with(|l| l.dpi.set(dpi));
+            // Появление — «шлепком» (B10): первая же картинка уже сжата
+            let anim = animations_on();
+            L.with(|l| {
+                l.splat.set(if anim { Some(Instant::now()) } else { None });
+                l.slide.set(None);
+            });
             w = create_widget(tb, x, y, lay.w, lay.h);
+            if anim && !w.is_null() {
+                anim_start();
+            }
             if w.is_null() {
                 let fails = L.with(|l| {
                     l.fails.set(l.fails.get() + 1);
@@ -512,16 +722,37 @@ mod win {
             if tray.is_none() {
                 applog::warn("панель задач: область уведомлений не найдена — ставлю виджет примерно");
             }
+        } else if L.with(|l| l.dragging.get()) {
+            // Виджет сейчас тащат — место задаёт мышь
         } else {
-            let moved = L.with(|l| {
-                let changed = l.place.get() != (x, y, lay.w, lay.h) || l.dpi.get() != dpi;
+            let (moved, old_w) = L.with(|l| {
+                let old = l.place.get();
+                let changed = old != (x, y, lay.w, lay.h) || l.dpi.get() != dpi;
                 l.place.set((x, y, lay.w, lay.h));
                 l.dpi.set(dpi);
-                changed
+                (changed, old.2)
             });
             if moved {
-                SetWindowPos(w, HWND_TOP, x, y, lay.w, lay.h, SWP_NOACTIVATE);
+                // Место в ряду сменилось, размер тот же — плавный переезд (B10), иначе сразу
+                let from = win_rect(w)
+                    .filter(|r| r.w == lay.w && r.h == lay.h)
+                    .map(|r| (r.x - tbr.x, r.y - tbr.y))
+                    .filter(|&f| f != (x, y) && animations_on());
+                match from {
+                    Some((fx, fy)) => {
+                        L.with(|l| l.slide.set(Some((fx, fy, x, y, Instant::now()))));
+                        anim_start();
+                    }
+                    None => {
+                        L.with(|l| l.slide.set(None));
+                        SetWindowPos(w, HWND_TOP, x, y, lay.w, lay.h, SWP_NOACTIVATE);
+                    }
+                }
                 redraw(w);
+                // Сменилась ширина (котик, масштаб) — соседям тоже пора сдвинуться
+                if old_w != lay.w {
+                    nudge_neighbours();
+                }
             } else {
                 // Панель задач Windows 11 иногда перекладывает свои слои поверх нас
                 SetWindowPos(w, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -531,14 +762,178 @@ mod win {
         report(true);
     }
 
+    /// Виджеты других копий TokenCat в панели задач: (ключ, прямоугольник на экране).
+    /// Ищем по имени класса и читаем подпись — чужое окно при этом не опрашивается.
+    unsafe fn neighbours(tb: HWND, me: HWND) -> Vec<(Key, Rect)> {
+        let class = wide("TokenCatTaskbarWidget");
+        let mut out = Vec::new();
+        let mut cur: HWND = std::ptr::null_mut();
+        loop {
+            cur = FindWindowExW(tb, cur, class.as_ptr(), std::ptr::null());
+            if cur.is_null() {
+                break;
+            }
+            // Свой и спрятанные (вытянутый виджет, который ещё держит мышь) — не в ряду
+            if cur == me || IsWindowVisible(cur) == 0 {
+                continue;
+            }
+            let mut buf = [0u16; 48];
+            let n = GetWindowTextW(cur, buf.as_mut_ptr(), buf.len() as i32);
+            let title = String::from_utf16_lossy(&buf[..n.max(0) as usize]);
+            if let (Some(k), Some(r)) = (parse_widget_title(&title), win_rect(cur)) {
+                out.push((k, r));
+            }
+        }
+        out
+    }
+
+    fn find_taskbar() -> HWND {
+        let cls = wide("Shell_TrayWnd");
+        // SAFETY: только поиск окна
+        unsafe { FindWindowW(cls.as_ptr(), std::ptr::null()) }
+    }
+
+    /// Панель задач на экране (основной монитор).
+    pub fn taskbar_rect() -> Option<Rect> {
+        win_rect(find_taskbar())
+    }
+
+    pub fn cursor_pos() -> (i32, i32) {
+        let mut p = POINT { x: 0, y: 0 };
+        // SAFETY: запись в локальную структуру
+        unsafe { GetCursorPos(&mut p) };
+        (p.x, p.y)
+    }
+
+    /// Включены ли «Эффекты анимации» Windows (Параметры → Специальные возможности →
+    /// Визуальные эффекты). Выключены — всё без анимации.
+    pub fn animations_on() -> bool {
+        let mut on: i32 = 1;
+        // SAFETY: запись в локальную переменную размера BOOL
+        unsafe { SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &mut on as *mut i32 as *mut c_void, 0) };
+        on != 0
+    }
+
+    /// Запустить таймер кадров анимации (если уже идёт — ничего).
+    unsafe fn anim_start() {
+        let host = HOST.load(Ordering::SeqCst);
+        if host != 0 {
+            SetTimer(h(host), TIMER_ANIM, 15, None);
+        }
+    }
+
+    /// Кадр анимации: «шлепок» и переезд. Всё кончилось — таймер выключаем (в простое CPU 0).
+    unsafe fn anim_tick(host: HWND) {
+        let w = h(WIDGET.load(Ordering::SeqCst));
+        let mut busy = false;
+        if w.is_null() {
+            L.with(|l| {
+                l.splat.set(None);
+                l.slide.set(None);
+            });
+        } else {
+            if let Some(start) = L.with(|l| l.splat.get()) {
+                if start.elapsed().as_secs_f64() * 1000.0 >= SPLAT_MS {
+                    L.with(|l| l.splat.set(None)); // последний кадр — уже обычная картинка
+                } else {
+                    busy = true;
+                }
+                redraw(w);
+            }
+            if L.with(|l| l.dragging.get()) {
+                L.with(|l| l.slide.set(None)); // виджет схватили — место задаёт мышь
+            }
+            if let Some((fx, fy, tx, ty, start)) = L.with(|l| l.slide.get()) {
+                let t = start.elapsed().as_secs_f64() * 1000.0 / SLIDE_MS;
+                let e = ease_out(t);
+                let x = fx + ((tx - fx) as f64 * e).round() as i32;
+                let y = fy + ((ty - fy) as f64 * e).round() as i32;
+                SetWindowPos(w, HWND_TOP, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+                if t >= 1.0 {
+                    L.with(|l| l.slide.set(None));
+                } else {
+                    busy = true;
+                }
+            }
+        }
+        if !busy {
+            KillTimer(host, TIMER_ANIM);
+        }
+    }
+
+    /// Левая кнопка мыши сейчас нажата (панель ещё тащат).
+    pub fn left_button_down() -> bool {
+        // SAFETY: чтение состояния клавиши
+        unsafe { GetAsyncKeyState(VK_LBUTTON as i32) as u16 & 0x8000 != 0 }
+    }
+
+    /// Порядок для панели, которую бросили на панель задач в точке (x, y): встать между
+    /// соседними виджетами там, куда бросили. Можно звать из любого потока.
+    pub fn order_for_drop(x: i32, y: i32) -> i32 {
+        let tb = find_taskbar();
+        let Some(tbr) = win_rect(tb) else { return 0 };
+        let vertical = tbr.h > tbr.w;
+        let me = h(WIDGET.load(Ordering::SeqCst));
+        // SAFETY: только поиск окон и чтение подписей
+        let others: Vec<(i32, i32)> = unsafe { neighbours(tb, me) }
+            .into_iter()
+            .map(|((o, _), r)| (o, if vertical { r.y + r.h / 2 } else { r.x + r.w / 2 }))
+            .collect();
+        order_at(if vertical { y } else { x }, &others)
+    }
+
+    /// Новый порядок (после перетаскивания или из настроек).
+    pub fn set_order(order: i32) {
+        if ORDER.swap(order, Ordering::SeqCst) == order {
+            return;
+        }
+        let host = HOST.load(Ordering::SeqCst);
+        if host != 0 {
+            // Подпись и место меняет поток виджета (окна его); PostMessage не ждёт
+            // SAFETY: см. set_enabled
+            unsafe { PostMessageW(h(host), WM_APP_ORDER, 0, 0) };
+        }
+    }
+
+    /// Подпись виджета = его место в ряду (её читают соседи).
+    unsafe fn update_title() {
+        let w = WIDGET.load(Ordering::SeqCst);
+        if w != 0 {
+            let t = wide(&widget_title(my_key()));
+            SetWindowTextW(h(w), t.as_ptr());
+        }
+    }
+
+    /// Толкнуть виджеты других копий: пусть встанут на место сейчас, а не по таймеру.
+    unsafe fn nudge_neighbours() {
+        let msg = REFLOW_MSG.load(Ordering::SeqCst);
+        let tb = find_taskbar();
+        if msg == 0 || tb.is_null() {
+            return;
+        }
+        let class = wide("TokenCatTaskbarWidget");
+        let me = h(WIDGET.load(Ordering::SeqCst));
+        let mut cur: HWND = std::ptr::null_mut();
+        loop {
+            cur = FindWindowExW(tb, cur, class.as_ptr(), std::ptr::null());
+            if cur.is_null() {
+                break;
+            }
+            if cur != me {
+                PostMessageW(cur, msg, 0, 0);
+            }
+        }
+    }
+
     unsafe fn create_widget(tb: HWND, x: i32, y: i32, w: i32, hh: i32) -> HWND {
+        let title = wide(&widget_title(my_key()));
         let class = WIDGET_CLASS.with(|c| c.get()) as *const u16;
         let hinst = GetModuleHandleW(std::ptr::null());
         let mk = |ex: u32| {
             CreateWindowExW(
                 ex,
                 class,
-                std::ptr::null(),
+                title.as_ptr(),
                 WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
                 x,
                 y,
@@ -576,6 +971,7 @@ mod win {
         }
         L.with(|l| l.mode.set(mode));
         WIDGET.store(wnd as isize, Ordering::SeqCst);
+        nudge_neighbours();
         SetWindowPos(wnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
         applog::info(format!(
             "панель задач: виджет {w}×{hh} в ({x}, {y}), фон: {}",
@@ -668,6 +1064,14 @@ mod win {
                 apply_enabled(hwnd);
                 0
             }
+            WM_APP_ORDER => {
+                update_title();
+                if enabled() && !L.with(|l| l.dragging.get()) {
+                    ensure_widget();
+                }
+                nudge_neighbours();
+                0
+            }
             WM_APP_DATA => {
                 // Котика включили/выключили — меняется ширина; остальное — просто перерисовать
                 if enabled() {
@@ -687,6 +1091,10 @@ mod win {
             }
             WM_TIMER if wp == TIMER_CAT => {
                 cat_tick();
+                0
+            }
+            WM_TIMER if wp == TIMER_ANIM => {
+                anim_tick(hwnd);
                 0
             }
             WM_SETTINGCHANGE | WM_THEMECHANGED => {
@@ -727,15 +1135,72 @@ mod win {
     }
 
     unsafe extern "system" fn widget_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+        let reflow = REFLOW_MSG.load(Ordering::SeqCst);
+        if reflow != 0 && msg == reflow {
+            // Сосед сменил место / появился / пропал — встать на место сразу
+            if enabled() && !L.with(|l| l.dragging.get()) {
+                ensure_widget();
+            }
+            return 0;
+        }
         match msg {
             WM_PAINT => {
                 paint(hwnd);
                 0
             }
             WM_ERASEBKGND => 1,
-            WM_LBUTTONUP => {
+            WM_LBUTTONDOWN => {
                 if let Some(r) = win_rect(hwnd) {
-                    emit(Event::Click(r));
+                    let (x, y) = cursor_pos();
+                    L.with(|l| {
+                        l.press.set(Some((x, y, x - r.x, y - r.y)));
+                        l.dragging.set(false);
+                    });
+                    SetCapture(hwnd);
+                }
+                0
+            }
+            WM_MOUSEMOVE => {
+                if L.with(|l| l.following.get()) {
+                    follow_move();
+                } else if let Some((px, py, gx, gy)) = L.with(|l| l.press.get()) {
+                    on_drag(hwnd, px, py, gx, gy);
+                }
+                0
+            }
+            WM_LBUTTONUP if L.with(|l| l.following.get()) => {
+                follow_move();
+                stop_follow();
+                0
+            }
+            WM_LBUTTONUP => {
+                let (press, dragging) = L.with(|l| (l.press.take(), l.dragging.replace(false)));
+                if press.is_some() {
+                    ReleaseCapture();
+                    if dragging {
+                        drop_in_row(hwnd);
+                    } else if let Some(r) = win_rect(hwnd) {
+                        emit(Event::Click(r));
+                    }
+                }
+                0
+            }
+            WM_CAPTURECHANGED if L.with(|l| l.following.get()) => {
+                L.with(|l| l.following.set(false));
+                FOLLOW.store(0, Ordering::SeqCst);
+                if !enabled() {
+                    destroy_widget();
+                }
+                0
+            }
+            WM_CAPTURECHANGED => {
+                // Захват мыши отняли (Alt+Tab и т. п.) — отменить перетаскивание
+                let was = L.with(|l| {
+                    l.press.set(None);
+                    l.dragging.replace(false)
+                });
+                if was {
+                    ensure_widget();
                 }
                 0
             }
@@ -751,6 +1216,72 @@ mod win {
             }
             _ => DefWindowProcW(hwnd, msg, wp, lp),
         }
+    }
+
+    // ---------- Перетаскивание ----------
+
+    /// Мышь двигается с нажатой кнопкой. Вдоль панели — виджет едет за курсором
+    /// (перестановка), увели за пределы панели — превращаемся в плавающую панель.
+    unsafe fn on_drag(hwnd: HWND, px: i32, py: i32, gx: i32, gy: i32) {
+        let (x, y) = cursor_pos();
+        let tb = GetParent(hwnd);
+        let (Some(tbr), Some(r)) = (win_rect(tb), win_rect(hwnd)) else { return };
+        let scale = L.with(|l| l.dpi.get()) as f64 / 96.0;
+        let margin = (12.0 * scale) as i32;
+        let outside = x < tbr.x - margin || y < tbr.y - margin || x > tbr.x + tbr.w + margin || y > tbr.y + tbr.h + margin;
+        if outside {
+            // Захват мыши не отпускаем: виджет будет вести появившуюся панель (follow)
+            L.with(|l| {
+                l.press.set(None);
+                l.dragging.set(false);
+                l.following.set(true);
+            });
+            emit(Event::DragOut(x, y));
+            return;
+        }
+        let threshold = (4.0 * scale) as i32;
+        if !L.with(|l| l.dragging.get()) {
+            if (x - px).abs() < threshold && (y - py).abs() < threshold {
+                return;
+            }
+            L.with(|l| l.dragging.set(true));
+        }
+        // Координаты внутри панели задач
+        let vertical = tbr.h > tbr.w;
+        let (nx, ny) = if vertical {
+            (r.x - tbr.x, (y - gy - tbr.y).clamp(0, (tbr.h - r.h).max(0)))
+        } else {
+            ((x - gx - tbr.x).clamp(0, (tbr.w - r.w).max(0)), r.y - tbr.y)
+        };
+        SetWindowPos(hwnd, HWND_TOP, nx, ny, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+        // Живой ряд: место меняется уже во время перетаскивания, соседи сразу расступаются
+        let others: Vec<(i32, i32)> = neighbours(tb, hwnd)
+            .into_iter()
+            .map(|((o, _), r)| (o, if vertical { r.y + r.h / 2 } else { r.x + r.w / 2 }))
+            .collect();
+        let order = order_at(if vertical { y } else { x }, &others);
+        if ORDER.swap(order, Ordering::SeqCst) != order {
+            update_title();
+            nudge_neighbours();
+        }
+    }
+
+    /// Отпустили виджет в ряду: новый порядок по месту курсора, остальные подвинутся сами.
+    unsafe fn drop_in_row(hwnd: HWND) {
+        let (x, y) = cursor_pos();
+        let tb = GetParent(hwnd);
+        let vertical = win_rect(tb).is_some_and(|r| r.h > r.w);
+        let others: Vec<(i32, i32)> = neighbours(tb, hwnd)
+            .into_iter()
+            .map(|((o, _), r)| (o, if vertical { r.y + r.h / 2 } else { r.x + r.w / 2 }))
+            .collect();
+        let order = order_at(if vertical { y } else { x }, &others);
+        ORDER.store(order, Ordering::SeqCst);
+        update_title();
+        nudge_neighbours();
+        emit(Event::Reorder(order)); // запомнить в настройках профиля
+        L.with(|l| l.place.set((i32::MIN, 0, 0, 0))); // встать на место сейчас же
+        ensure_widget();
     }
 
     // ---------- Рисование ----------
@@ -818,6 +1349,10 @@ mod win {
         for p in px.iter_mut() {
             *p = if *p & 0x00ff_ffff == key_px { 0x0100_0000 } else { *p | 0xff00_0000 };
         }
+        if let Some(start) = L.with(|l| l.splat.get()) {
+            let (sx, sy) = splat(start.elapsed().as_secs_f64() * 1000.0 / SPLAT_MS);
+            squash(px, w, hh, sx, sy);
+        }
         let size = SIZE { cx: w, cy: hh };
         let src = POINT { x: 0, y: 0 };
         let blend = BLENDFUNCTION {
@@ -835,6 +1370,25 @@ mod win {
             applog::warn("панель задач: UpdateLayeredWindow не сработал — перехожу на цветовой ключ");
         }
         ok
+    }
+
+    /// Сжать/растянуть картинку относительно центра (кадр «шлепка»). Пустые места —
+    /// почти прозрачные (альфа 1): клики по виджету ловятся и во время анимации.
+    fn squash(px: &mut [u32], w: i32, hh: i32, sx: f64, sy: f64) {
+        let src = px.to_vec();
+        let (cx, cy) = (w as f64 / 2.0, hh as f64 / 2.0);
+        for y in 0..hh {
+            let syf = cy + (y as f64 + 0.5 - cy) / sy;
+            for x in 0..w {
+                let sxf = cx + (x as f64 + 0.5 - cx) / sx;
+                let (ix, iy) = (sxf.floor() as i32, syf.floor() as i32);
+                px[(y * w + x) as usize] = if ix >= 0 && iy >= 0 && ix < w && iy < hh {
+                    src[(iy * w + ix) as usize]
+                } else {
+                    0x0100_0000
+                };
+            }
+        }
     }
 
     /// Нарисовать виджет размера `r` в контекст `mem` (фон — цвет-ключ темы).
@@ -886,8 +1440,11 @@ mod win {
         let text_c = if d.stale { pal.muted } else { pal.text };
         SetTextColor(mem, text_c);
 
+        // «Шлепок» (B10): полоски заполняются волной
+        let wave_t = L.with(|l| l.splat.get()).map(|s| s.elapsed().as_secs_f64() * 1000.0 / SPLAT_MS);
         let rows = [("5ч", d.session), ("Н", d.weekly)];
         for (i, (label, val)) in rows.iter().enumerate() {
+            let wave = wave_t.map_or(1.0, |t| fill_wave(t, i));
             let cy = lay.row_y[i];
             let pct: Vec<u16> = pct_text(*val).encode_utf16().collect();
             let (pw, ph) = text_w(mem, &pct);
@@ -898,7 +1455,7 @@ mod win {
                 let by = cy - lay.bar_h / 2;
                 fill(mem, lay.bar_x, by, lay.bar_w, lay.bar_h, pal.track);
                 if let Some(p) = val {
-                    let fw = ((lay.bar_w as f64) * p.clamp(0.0, 100.0) / 100.0).round() as i32;
+                    let fw = ((lay.bar_w as f64) * p.clamp(0.0, 100.0) / 100.0 * wave).round() as i32;
                     let c = if d.stale { pal.muted } else { rgb3(icons::level_color(*p)) };
                     fill(mem, lay.bar_x, by, fw, lay.bar_h, c);
                 }
@@ -909,7 +1466,7 @@ mod win {
                 let by = cy + ph / 2;
                 fill(mem, lay.bar_x, by, lay.bar_w, lay.bar_h, pal.track);
                 if let Some(p) = val {
-                    let fw = ((lay.bar_w as f64) * p.clamp(0.0, 100.0) / 100.0).round() as i32;
+                    let fw = ((lay.bar_w as f64) * p.clamp(0.0, 100.0) / 100.0 * wave).round() as i32;
                     let c = if d.stale { pal.muted } else { rgb3(icons::level_color(*p)) };
                     fill(mem, lay.bar_x, by, fw, lay.bar_h, c);
                 }
@@ -965,6 +1522,52 @@ mod tests {
         assert_eq!(spot(tb, None, 120, 48, 4), (1440 - 120, 0));
         // Трей пустой (0 × 0) — тоже «не нашли»
         assert_eq!(spot(tb, Some(Rect { x: 0, y: 0, w: 0, h: 0 }), 120, 48, 4), (1320, 0));
+    }
+
+    #[test]
+    fn two_profiles_in_a_row() {
+        // Основной (порядок 0) — у трея, профиль 2 (порядок 100) — левее
+        assert_eq!(queue_offset((0, 0), &[((100, 1), 128)], 4), 0);
+        assert_eq!(queue_offset((100, 1), &[((0, 0), 128)], 4), 132);
+        // Третий — за двумя; кто дальше от трея, не мешает
+        assert_eq!(queue_offset((200, 2), &[((0, 0), 128), ((100, 1), 100), ((500, 5), 90)], 4), 132 + 104);
+        // Одинаковый порядок — решает номер профиля
+        assert_eq!(queue_offset((0, 1), &[((0, 0), 128)], 4), 132);
+        assert_eq!(parse_widget_title(&widget_title((-150, 3))), Some((-150, 3)));
+        assert_eq!(parse_widget_title("TokenCat:7"), None);
+        assert_eq!(default_order(2), 200);
+    }
+
+    #[test]
+    fn drop_between_neighbours() {
+        // Трей справа. Соседи: порядок 0 (центр 1640), 100 (центр 1500)
+        let others = [(0, 1640), (100, 1500)];
+        // Бросили правее всех (у трея) — ближе всех к трею
+        assert_eq!(order_at(1700, &others), -100);
+        // Между ними
+        assert_eq!(order_at(1570, &others), 50);
+        // Левее всех
+        assert_eq!(order_at(1200, &others), 200);
+        // Соседей нет
+        assert_eq!(order_at(500, &[]), 0);
+        // Соседи вплотную по порядку
+        assert_eq!(order_at(1570, &[(0, 1640), (1, 1500)]), 1);
+    }
+
+    #[test]
+    fn splat_curve() {
+        let (sx, sy) = splat(0.0);
+        assert!(sx < 1.0 && sy > 1.0, "начало — узкий и вытянутый");
+        let (sx, sy) = splat(0.4);
+        assert!(sx > 1.0 && sy < 1.0, "середина — сплющен");
+        assert_eq!(splat(1.0), (1.0, 1.0));
+        assert_eq!(splat(5.0), (1.0, 1.0));
+        assert_eq!(fill_wave(0.0, 0), 0.0);
+        assert!(fill_wave(0.5, 0) > fill_wave(0.5, 1), "вторая строка заполняется позже");
+        assert_eq!(fill_wave(1.0, 1), 1.0);
+        assert_eq!(ease_out(0.0), 0.0);
+        assert_eq!(ease_out(1.0), 1.0);
+        assert!(ease_out(0.5) > 0.5);
     }
 
     #[test]

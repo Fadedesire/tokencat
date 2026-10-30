@@ -128,6 +128,7 @@ fn main() {
             commands::profile_remove,
             commands::open_log,
             overlay::overlay_fit,
+            views::panel_painted,
             overlay::overlay_menu
         ])
         .run(tauri::generate_context!())

@@ -11,3 +11,31 @@ html, body {
 /* Вся панель — «ручка» для перетаскивания */
 .tc-panel { cursor: default; }
 .tc-panel button { cursor: pointer; }
+
+/* Залёт в панель задач и вылет из неё (B10). Время залёта = FLY_IN_MS в views.rs.
+   Масштаб не больше 1: окно размером с панель, всё крупнее обрезалось бы. */
+#slot.fly-in { animation: tc-fly-in 190ms cubic-bezier(.5, 0, .9, .5) forwards; }
+#slot.fly-out { animation: tc-fly-out 280ms cubic-bezier(.2, .8, .3, 1) both; }
+@keyframes tc-fly-in {
+  0%   { transform: none; opacity: 1; }
+  55%  { opacity: .85; }
+  100% { transform: scale(.22, .16); opacity: 0; }
+}
+@keyframes tc-fly-out {
+  0%   { transform: scale(.3, .2); opacity: 0; }
+  35%  { opacity: 1; }
+  70%  { transform: scale(1, .96); }
+  100% { transform: none; opacity: 1; }
+}
+/* Строки гаснут / появляются волной сверху вниз */
+#slot.fly-in .tc-row { animation: tc-row-out 120ms ease-in forwards; }
+#slot.fly-in .tc-row:nth-child(2) { animation-delay: 35ms; }
+#slot.fly-in .tc-row:nth-child(n+3) { animation-delay: 70ms; }
+#slot.fly-out .tc-row { animation: tc-row-in 200ms ease-out 70ms both; }
+#slot.fly-out .tc-row:nth-child(2) { animation-delay: 120ms; }
+#slot.fly-out .tc-row:nth-child(n+3) { animation-delay: 170ms; }
+@keyframes tc-row-out { to { opacity: 0; transform: translateY(3px); } }
+@keyframes tc-row-in { from { opacity: 0; transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) {
+  #slot.fly-in, #slot.fly-out, #slot .tc-row { animation: none !important; }
+}

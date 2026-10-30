@@ -199,7 +199,7 @@ pub fn show_popup(app: &AppHandle, anchor: Option<Rect>, toggle: bool) {
     *ANCHOR.lock().unwrap() = anchor;
     place_popup(app);
     let _ = w.set_always_on_top(true);
-    let _ = w.show();
+    appear(app, &w);
     let _ = w.set_focus();
 }
 
@@ -237,6 +237,43 @@ pub fn on_tray_click(app: &AppHandle, rect: Option<tauri::Rect>) {
     tauri::async_runtime::spawn(async move { show_popup(&app, r, true) });
 }
 
+// ---------- Показ и скрытие панели ----------
+
+/// Панель отрисовалась после показа (main.js, команда panel_painted)
+static PAINTED: AtomicBool = AtomicBool::new(false);
+
+/// Вылет из панели задач (B10): следующий показ панели — «выплеском» из этой точки окна
+/// (физические пиксели от левого верхнего угла).
+static FLY_FROM: Mutex<Option<(i32, i32)>> = Mutex::new(None);
+
+/// Залёт в панель задач: сколько длится втягивание панели (то же время — в overlay.css)
+#[cfg(windows)]
+const FLY_IN_MS: u64 = 190;
+
+/// Показать главное окно. JS возвращает панели видимость (её гасит залёт) и через два
+/// кадра сообщает «нарисовалась» — до этого системное перетаскивание не начинаем.
+/// После вылета панель «выплёскивается» из точки FLY_FROM: пока окно WebView дорисовывается,
+/// панель ещё прозрачная — анимация прикрывает этот лаг.
+fn appear(app: &AppHandle, w: &tauri::WebviewWindow) {
+    PAINTED.store(false, Ordering::SeqCst);
+    let payload = match FLY_FROM.lock().unwrap().take() {
+        Some((x, y)) => serde_json::json!({ "fly": [x, y] }),
+        None => serde_json::Value::Null,
+    };
+    let _ = tauri::Emitter::emit_to(app, MAIN_LABEL, "panel-appear", payload);
+    let _ = w.show();
+}
+
+/// Команда от main.js: панель показана и нарисована.
+#[tauri::command]
+pub fn panel_painted(window: tauri::WebviewWindow) -> Result<(), String> {
+    if window.label() != MAIN_LABEL {
+        return Err("forbidden".into());
+    }
+    PAINTED.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
 // ---------- Переключение вида ----------
 
 /// Вид сменился (настройки, меню, онбординг): переставить окна и значки.
@@ -251,7 +288,7 @@ pub fn apply(app: &AppHandle) {
             let _ = w.set_always_on_top(s.always_on_top);
             overlay::place(&w, app);
             if s.onboarded {
-                let _ = w.show();
+                appear(app, &w);
             }
         }
     }
@@ -273,13 +310,28 @@ fn start_platform(app: &AppHandle, view: &str) {
     let on = view == "taskbar";
     if on {
         let h = app.clone();
-        taskbar::start(move |e| {
+        let slot = app.state::<crate::profile::Profile>().slot();
+        let order = app.state::<SettingsStore>().get().taskbar_order.unwrap_or(taskbar::default_order(slot));
+        taskbar::set_order(order);
+        taskbar::start(slot, order, move |e| {
             // Поток виджета связан с Проводником: здесь ничего не ждём, всё — в задачу
+            if let Event::FollowTo(x, y) = e {
+                follow_to(&h, x, y);
+                return;
+            }
             let h = h.clone();
             tauri::async_runtime::spawn(async move {
                 match e {
                     Event::Click(r) => show_popup(&h, Some(r), true),
                     Event::Menu(x, y) => context_menu_at(&h, x, y),
+                    Event::DragOut(x, y) => drag_out(&h, x, y),
+                    Event::FollowTo(..) => {}
+                    Event::Reorder(o) => {
+                        if let Err(e) = h.state::<SettingsStore>().update(|s| s.taskbar_order = Some(o)) {
+                            applog::warn(e);
+                        }
+                        applog::info(format!("панель задач: виджет переставлен, порядок {o}"));
+                    }
                     Event::Embedded(ok) => {
                         FALLBACK.store(!ok, Ordering::SeqCst);
                         ICON_KEY.lock().unwrap().clear();
@@ -296,6 +348,202 @@ fn start_platform(app: &AppHandle, view: &str) {
 
 #[cfg(not(windows))]
 fn start_platform(_app: &AppHandle, _view: &str) {}
+
+/// Виджет вытянули из панели задач (поток виджета сообщил): плавающая панель под курсором,
+/// дальше — watch_drag.
+#[cfg(windows)]
+fn drag_out(app: &AppHandle, _x: i32, _y: i32) {
+    applog::info("виджет вытянули из панели задач");
+    watch_drag(app, true);
+}
+
+/// Куда поставить ведомую панель (последняя точка) и есть ли уже переезд в очереди
+#[cfg(windows)]
+static FOLLOW_X: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+#[cfg(windows)]
+static FOLLOW_Y: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+#[cfg(windows)]
+static FOLLOW_PENDING: AtomicBool = AtomicBool::new(false);
+
+/// Поставить панель в точку (ничего не ждёт). В главный поток уходит не больше одного
+/// переезда за раз, и он берёт самую свежую точку: если слать переезд на каждое движение
+/// мыши, они копятся, и панель повторяет путь курсора с большим опозданием.
+#[cfg(windows)]
+fn follow_to(app: &AppHandle, x: i32, y: i32) {
+    FOLLOW_X.store(x, Ordering::SeqCst);
+    FOLLOW_Y.store(y, Ordering::SeqCst);
+    if FOLLOW_PENDING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let h = app.clone();
+    let r = app.run_on_main_thread(move || {
+        FOLLOW_PENDING.store(false, Ordering::SeqCst);
+        let (x, y) = (FOLLOW_X.load(Ordering::SeqCst), FOLLOW_Y.load(Ordering::SeqCst));
+        if let Some(w) = h.get_webview_window(MAIN_LABEL) {
+            let _ = w.set_position(PhysicalPosition::new(x, y));
+        }
+    });
+    if r.is_err() {
+        FOLLOW_PENDING.store(false, Ordering::SeqCst);
+    }
+}
+
+#[cfg(windows)]
+static WATCHING: AtomicBool = AtomicBool::new(false);
+
+/// Зона «принести в панель задач» вокруг неё, логические пиксели. Вытащить обратно (или
+/// «зарядить» вставку у панели, схваченной рядом с панелью задач) — увести курсор дальше,
+/// чем на DOCK_ZONE + REARM_EXTRA: без дребезга на границе.
+#[cfg(windows)]
+const DOCK_ZONE: f64 = 36.0;
+#[cfg(windows)]
+const REARM_EXTRA: f64 = 24.0;
+
+/// Курсор рядом с панелью задач (её прямоугольник, расширенный на `pad` во все стороны).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn near(tb: Rect, x: i32, y: i32, pad: i32) -> bool {
+    x >= tb.x - pad && y >= tb.y - pad && x < tb.x + tb.w + pad && y < tb.y + tb.h + pad
+}
+
+/// Перетаскивание с зажатой ЛКМ. Решение Ромы 30.10: панель «влетела» в панель задач —
+/// перетаскивание на этом заканчивается, как будто кнопку отпустили. Дальше мышь ни на что
+/// не влияет, пока кнопку не отпустят; вытащить виджет снова — новым нажатием на него.
+/// `from_widget` — зажали виджет и увели курсор из панели задач; иначе плавающую панель
+/// тащит система. Отдельный поток раз в ~2 мс смотрит на курсор: вытаскивает, ведёт панель
+/// за курсором (follow_to — без очереди переездов) и вставляет. Системное перетаскивание
+/// при вставке прерываем (WM_CANCELMODE).
+#[cfg(windows)]
+pub fn watch_drag(app: &AppHandle, from_widget: bool) {
+    use crate::taskbar;
+    if WATCHING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    let r = std::thread::Builder::new().name("tokencat-drag".into()).spawn(move || {
+        let scale = main_scale(&app);
+        let zone = (DOCK_ZONE * scale) as i32;
+        let rearm = zone + (REARM_EXTRA * scale) as i32;
+        let (cx, cy) = taskbar::cursor_pos();
+        // За какую точку держат панель: из виджета — середина шапки, иначе — где схватили
+        let grab = match app.get_webview_window(MAIN_LABEL) {
+            Some(w) if !from_widget => match w.outer_position() {
+                Ok(p) => (cx - p.x, cy - p.y),
+                Err(_) => (0, 0),
+            },
+            Some(w) => {
+                let size = w.outer_size().unwrap_or_default();
+                (size.width as i32 / 2, (13.0 * w.scale_factor().unwrap_or(1.0)) as i32)
+            }
+            None => (0, 0),
+        };
+        // Виджет сейчас в панели задач? Панель ведём сами? Вставка «заряжена»?
+        let mut docked = from_widget;
+        let mut lead = false;
+        let mut armed = !taskbar::taskbar_rect().is_some_and(|tb| near(tb, cx, cy, zone));
+        let mut last = (i32::MIN, i32::MIN);
+        while taskbar::left_button_down() {
+            let (x, y) = taskbar::cursor_pos();
+            let tb = taskbar::taskbar_rect();
+            if docked {
+                // Вытаскивание из виджета — сразу (виджет уже решил, что курсор ушёл из
+                // панели задач). Вставка в обратную сторону заканчивает цикл (break ниже),
+                // так что «в панели» здесь бывает только в самом начале.
+                if tb.is_some_and(|tb| !near(tb, x, y, 0)) {
+                    undock(&app, x - grab.0, y - grab.1, grab);
+                    docked = false;
+                    lead = true;
+                    // Только что вытащили: всасывание включится, когда курсор уйдёт из зоны
+                    // с запасом (rearm) — иначе при медленном вытаскивании панель сразу
+                    // влетала обратно (Рома, 30.10)
+                    armed = false;
+                    last = (x, y);
+                }
+            } else {
+                if lead && (x, y) != last {
+                    follow_to(&app, x - grab.0, y - grab.1);
+                    last = (x, y);
+                }
+                match tb {
+                    Some(tb) if !armed => armed = !near(tb, x, y, rearm),
+                    Some(tb) if near(tb, x, y, zone) => {
+                        // Влетела — сразу «отпускаем»: дальше этот поток мышь не смотрит
+                        dock(&app, x, y);
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        WATCHING.store(false, Ordering::SeqCst);
+    });
+    if r.is_err() {
+        WATCHING.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Стать плавающей панелью: левый верхний угол в (x, y); `grab` — за какую точку панель
+/// держат (из неё она «выплёскивается», B10).
+#[cfg(windows)]
+fn undock(app: &AppHandle, x: i32, y: i32, grab: (i32, i32)) {
+    let r = app.state::<SettingsStore>().update(|s| {
+        s.view = "overlay".into();
+        s.overlay_x = Some(x);
+        s.overlay_y = Some(y);
+    });
+    if let Err(e) = r {
+        applog::warn(e);
+        return;
+    }
+    applog::info("панель вытащили из панели задач");
+    *FLY_FROM.lock().unwrap() = Some(grab);
+    apply(app);
+    shell::settings_changed(app);
+}
+
+/// Стать виджетом в панели задач на месте курсора (x, y).
+#[cfg(windows)]
+fn dock(app: &AppHandle, x: i32, y: i32) {
+    use crate::taskbar;
+    let order = taskbar::order_for_drop(x, y);
+    let r = app.state::<SettingsStore>().update(|s| {
+        s.view = "taskbar".into();
+        s.taskbar_order = Some(order);
+    });
+    if let Err(e) = r {
+        applog::warn(e);
+        return;
+    }
+    taskbar::set_order(order);
+    applog::info(format!("панель принесли в панель задач — виджет, порядок {order}"));
+    let anim = taskbar::animations_on();
+    let mut hwnd = 0;
+    if let Some(w) = app.get_webview_window(MAIN_LABEL) {
+        hwnd = w.hwnd().map(|h| h.0 as isize).unwrap_or(0);
+        // Залёт (B10): панель втягивается в ближайшую к панели задач точку под курсором и
+        // гаснет; потом прячем окно, а виджет появляется «шлепком». Без анимаций — просто
+        // гаснет (иначе Windows на кадр показывает старую картинку — «силуэт»).
+        let p = w.outer_position().unwrap_or_default();
+        let size = w.outer_size().unwrap_or_default();
+        let (tx, ty) = match taskbar::taskbar_rect() {
+            Some(tb) if tb.h > tb.w => (tb.x + tb.w / 2, y),
+            Some(tb) => (x, tb.y + tb.h / 2),
+            None => (x, y),
+        };
+        let ox = (tx - p.x).clamp(0, size.width as i32);
+        let oy = (ty - p.y).clamp(0, size.height as i32);
+        let _ = tauri::Emitter::emit_to(app, MAIN_LABEL, "panel-fly-in", serde_json::json!({ "x": ox, "y": oy, "anim": anim }));
+    }
+    std::thread::sleep(Duration::from_millis(if anim { FLY_IN_MS } else { 24 }));
+    apply(app);
+    // Системное перетаскивание окна (если шло) — прервать, но только когда окно уже
+    // спрятано: при отмене Windows возвращает окно туда, где его схватили, и раньше оно
+    // мелькало в стартовой точке (Рома, 30.10)
+    if hwnd != 0 {
+        taskbar::cancel_mode(hwnd);
+    }
+    shell::settings_changed(app);
+}
 
 /// Меню программы в точке экрана (ПКМ по виджету панели задач).
 #[cfg(windows)]
@@ -417,6 +665,15 @@ mod tests {
     use crate::usage::{Limit, Usage};
 
     const MON: Rect = Rect { x: 0, y: 0, w: 1920, h: 1080 };
+
+    #[test]
+    fn dock_zone() {
+        let tb = Rect { x: 0, y: 1032, w: 1920, h: 48 };
+        assert!(near(tb, 500, 1040, 0));
+        assert!(near(tb, 500, 1000, 36), "чуть выше панели — уже зона");
+        assert!(!near(tb, 500, 990, 36));
+        assert!(!near(tb, 500, 960, 36));
+    }
 
     #[test]
     fn popup_above_taskbar_widget() {

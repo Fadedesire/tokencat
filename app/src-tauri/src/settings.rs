@@ -43,6 +43,9 @@ pub struct Settings {
     pub view: String,
     /// Строка меню macOS: both | session | icon | ring (см. MENUBAR_STYLES)
     pub menubar_style: String,
+    /// Место виджета в ряду на панели задач Windows (меньше — ближе к трею). None — по номеру
+    /// профиля. Меняется перетаскиванием виджета.
+    pub taskbar_order: Option<i32>,
     /// Показывать котика
     pub show_cat: bool,
     /// Уведомления о 80 % / 100 % 5-часового лимита и о его сбросе
@@ -71,6 +74,7 @@ impl Default for Settings {
             always_on_top: true,
             view: "overlay".into(),
             menubar_style: "both".into(),
+            taskbar_order: None,
             show_cat: true,
             notify: true,
             language: "system".into(),

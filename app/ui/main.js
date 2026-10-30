@@ -27,7 +27,8 @@
       }
     },
   });
-  document.getElementById("slot").appendChild(panel.root);
+  const slot = document.getElementById("slot");
+  slot.appendChild(panel.root);
 
   // Снимок планировщика + состояние входа → что показать (как в окне настроек)
   function viewSnap() {
@@ -60,6 +61,8 @@
   // ---- Размер окна = размер панели ----
   let lastW = 0, lastH = 0;
   function fit() {
+    // Во время залёта/вылета панель сжата трансформом — размер окна не трогаем
+    if (slot.classList.contains("fly-in") || slot.classList.contains("fly-out")) return;
     const r = panel.root.getBoundingClientRect();
     const w = Math.ceil(r.width), h = Math.ceil(r.height);
     if (!w || !h || (w === lastW && h === lastH)) return;
@@ -101,6 +104,42 @@
     else render();
   });
   listen("settings-changed", (ev) => applySettings(ev.payload));
+  // Перетаскивание в панель задач и обратно (B2, анимации B10).
+  // Залёт: панель втягивается в точку (x, y) окна и гаснет, потом Rust прячет окно.
+  // Вылет: панель «выплёскивается» из точки, за которую её держат. Начинается с прозрачной —
+  // это прикрывает первые кадры, пока WebView дорисовывает только что показанное окно.
+  // Погасшая панель остаётся погасшей до следующего показа: иначе Windows на кадр покажет
+  // её старую картинку. Через два кадра после показа сообщаем Rust «нарисована».
+  // «Эффекты анимации» Windows выключены → prefers-reduced-motion → без анимаций.
+  const reduced = () => !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+  function fly(cls, x, y) {
+    const dpr = window.devicePixelRatio || 1;
+    slot.style.transformOrigin = (x / dpr) + "px " + (y / dpr) + "px";
+    slot.classList.remove("fly-in", "fly-out");
+    void slot.offsetWidth;            // перезапустить анимацию
+    slot.classList.add(cls);
+  }
+  slot.addEventListener("animationend", (e) => {
+    if (e.target === slot && e.animationName === "tc-fly-out") {
+      slot.classList.remove("fly-out");
+      fit();
+    }
+  });
+  listen("panel-fly-in", (ev) => {
+    const p = ev.payload || {};
+    if (!p.anim || reduced()) { document.body.style.opacity = "0"; return; }
+    fly("fly-in", p.x, p.y);
+  });
+  listen("panel-appear", (ev) => {
+    const p = ev.payload;
+    document.body.style.opacity = "";
+    slot.classList.remove("fly-in");
+    if (p && p.fly && !reduced()) fly("fly-out", p.fly[0], p.fly[1]);
+    else { slot.classList.remove("fly-out"); fit(); }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      invoke("panel_painted").catch(() => {});
+    }));
+  });
   listen("auth-changed", async (ev) => {
     const p = ev.payload || {};
     if (p.kind === "problem" || (p.kind === "cancelled" && p.message)) {

@@ -43,7 +43,7 @@ pub struct Rect {
 }
 
 impl Rect {
-    fn contains(&self, px: i32, py: i32) -> bool {
+    pub fn contains(&self, px: i32, py: i32) -> bool {
         px >= self.x && py >= self.y && px < self.x + self.w && py < self.y + self.h
     }
 }
@@ -178,12 +178,21 @@ pub fn on_moved(app: &AppHandle, pos: PhysicalPosition<i32>) {
     if crate::views::is_popup(app) {
         return;
     }
+    // Панель тащат мышью — следим, не несут ли её в панель задач (B2, views::watch_drag)
+    #[cfg(windows)]
+    if crate::taskbar::left_button_down() {
+        crate::views::watch_drag(app, false);
+    }
     let gen = MOVE_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(700)).await;
         if MOVE_GEN.load(Ordering::SeqCst) != gen {
             return; // ещё двигают
+        }
+        // Панель уже ушла в панель задач — это не место плавающей панели
+        if crate::views::is_popup(&app) {
+            return;
         }
         let r = app.state::<SettingsStore>().update(|s| {
             s.overlay_x = Some(pos.x);
