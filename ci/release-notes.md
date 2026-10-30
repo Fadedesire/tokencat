@@ -1,1 +1,2 @@
-- Первая публичная версия / First public release.
+- Первая публичная версия: лимиты 5 ч и недели, котик, 9 языков, автообновление.
+- First public release: 5-hour and weekly limits, pixel cat, 9 languages, auto-update.

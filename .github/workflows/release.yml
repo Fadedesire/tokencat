@@ -56,6 +56,8 @@ jobs:
             gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
               --title "TokenCat $GITHUB_REF_NAME" --notes-file ci/release-notes.md
           id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name==\"$GITHUB_REF_NAME\") | .id" | head -1)
+          if [ -z "$id" ]; then echo "::error::Не нашёл черновик релиза $GITHUB_REF_NAME"; exit 1; fi
+          echo "Черновик: id=$id"
           echo "id=$id" >> "$GITHUB_OUTPUT"
 
   build:
@@ -102,9 +104,24 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           projectPath: app
+          # Загрузка в черновик: по id, а если его нет — по тегу (иначе action молча ничего не грузит)
           releaseId: ${{ needs.draft.outputs.id }}
+          tagName: ${{ github.ref_name }}
+          releaseName: TokenCat ${{ github.ref_name }}
+          releaseDraft: true
           includeUpdaterJson: true
+          uploadUpdaterJson: true
           args: ${{ matrix.args }} --config src-tauri/tauri.release.conf.json
+
+      - name: Check uploaded assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          names=$(gh api "repos/$GITHUB_REPOSITORY/releases/${{ needs.draft.outputs.id }}/assets" --jq '.[].name')
+          echo "$names"
+          if [ "${{ matrix.name }}" = "windows" ]; then want="setup.exe"; else want=".dmg"; fi
+          echo "$names" | grep -q -- "$want" || { echo "::error::В черновике нет $want — tauri-action ничего не загрузил"; exit 1; }
 
       # Portable: тот же exe в zip — для тех, кто не хочет установщик
       - name: Portable zip (Windows)

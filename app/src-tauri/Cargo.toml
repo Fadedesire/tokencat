@@ -1,6 +1,6 @@
 [package]
 name = "tokencat"
-version = "0.9.0"
+version = "0.9.1"
 description = "TokenCat — трекер лимитов для Claude (неофициальный)"
 edition = "2021"
 publish = false
