@@ -23,7 +23,8 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "visible": false,
-        "focus": false
+        "focus": false,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu --disable-background-networking --disable-component-update"
       }
     ],
     "security": {

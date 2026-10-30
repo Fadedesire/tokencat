@@ -186,7 +186,7 @@ pub async fn auth_login(window: WebviewWindow, app: AppHandle) -> CmdResult<()> 
         return Ok(());
     }
     let url = Url::parse(&format!("{}/login", api::BASE)).map_err(err)?;
-    let b = WebviewWindowBuilder::new(&app, LOGIN_LABEL, WebviewUrl::External(url))
+    let b = crate::shell::with_browser_args(WebviewWindowBuilder::new(&app, LOGIN_LABEL, WebviewUrl::External(url)))
         .title(crate::i18n::t("win.login"))
         .inner_size(480.0, 760.0)
         .center()

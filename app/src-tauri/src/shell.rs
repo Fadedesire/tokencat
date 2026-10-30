@@ -123,7 +123,7 @@ pub fn open_settings(app: &AppHandle, section: Option<&str>) {
         return;
     }
     *GOTO.lock().unwrap() = section.map(String::from);
-    let r = WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("settings.html".into()))
+    let r = with_browser_args(WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("settings.html".into())))
         .title(window_title(app, &crate::i18n::t("win.settings")))
         .inner_size(440.0, 640.0)
         .min_inner_size(400.0, 420.0)
@@ -136,13 +136,33 @@ pub fn open_settings(app: &AppHandle, section: Option<&str>) {
     }
 }
 
+/// B3 (лёгкость): флаги WebView2 для ВСЕХ окон. Должны совпадать у окон с общей папкой
+/// данных, иначе WebView2 не создаст окно — поэтому одна константа (и та же строка в
+/// tauri.conf.json → additionalBrowserArgs у главного окна).
+/// Первая часть — флаги Tauri по умолчанию; дальше: без GPU-процесса (панель крошечная,
+/// программная отрисовка ей хватает), без фоновых сетевых служб и обновлений компонентов.
+pub const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu --disable-background-networking --disable-component-update";
+
+pub fn with_browser_args<'a, R: tauri::Runtime, M: Manager<R>>(
+    b: WebviewWindowBuilder<'a, R, M>,
+) -> WebviewWindowBuilder<'a, R, M> {
+    #[cfg(windows)]
+    {
+        b.additional_browser_args(BROWSER_ARGS)
+    }
+    #[cfg(not(windows))]
+    {
+        b
+    }
+}
+
 /// Онбординг: первый запуск или «Пройти заново» в настройках.
 pub fn open_onboarding(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(ONBOARDING_LABEL) {
         focus(&w);
         return;
     }
-    let r = WebviewWindowBuilder::new(app, ONBOARDING_LABEL, WebviewUrl::App("onboarding.html".into()))
+    let r = with_browser_args(WebviewWindowBuilder::new(app, ONBOARDING_LABEL, WebviewUrl::App("onboarding.html".into())))
         .title(window_title(app, &crate::i18n::t("win.welcome")))
         .inner_size(560.0, 580.0)
         .resizable(false)

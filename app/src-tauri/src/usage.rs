@@ -11,11 +11,11 @@
 //
 // Без Tauri и сети — целиком покрыто тестами.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Один лимит: 5-часовое окно, неделя, неделя по модели и т.п.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Limit {
     /// session | weekly_all | weekly_sonnet | weekly_opus | … (как пришло)
     pub kind: String,
@@ -30,7 +30,7 @@ pub struct Limit {
 }
 
 /// Доля недели по продуктам (Claude Code, Чаты, Cowork…).
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Share {
     pub key: String,
     /// Уже на языке аккаунта
@@ -39,7 +39,7 @@ pub struct Share {
 }
 
 /// Кредиты сверх плана.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Extra {
     pub enabled: bool,
     pub percent: Option<f64>,
@@ -49,7 +49,7 @@ pub struct Extra {
     pub exponent: Option<u32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Usage {
     /// 5-часовое окно
     pub session: Option<Limit>,
@@ -59,7 +59,8 @@ pub struct Usage {
     pub others: Vec<Limit>,
     pub breakdown: Vec<Share>,
     pub extra: Option<Extra>,
-    /// limits | legacy — откуда взяты проценты (для лога)
+    /// limits | legacy | cache — откуда взяты проценты (для лога). В кеш (B3) не нужен.
+    #[serde(skip_deserializing)]
     pub source: &'static str,
 }
 

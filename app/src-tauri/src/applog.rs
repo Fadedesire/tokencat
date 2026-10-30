@@ -9,7 +9,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 pub const FILE_NAME: &str = "tokencat.log";
 const MAX_BYTES: u64 = 512 * 1024;
@@ -22,6 +22,19 @@ struct Log {
 }
 
 static LOG: OnceLock<Log> = OnceLock::new();
+
+// B3 (замеры): момент старта процесса — для строки «perf: первые цифры через N мс».
+static STARTED: OnceLock<Instant> = OnceLock::new();
+
+/// Запомнить момент старта. Вызывать первой строкой main().
+pub fn mark_start() {
+    let _ = STARTED.set(Instant::now());
+}
+
+/// Сколько миллисекунд прошло от mark_start() (0, если не вызывали).
+pub fn since_start_ms() -> u128 {
+    STARTED.get().map(|t| t.elapsed().as_millis()).unwrap_or(0)
+}
 
 /// Вызвать один раз при старте. До этого (и в тестах) сообщения просто выводятся в консоль.
 pub fn init(dir: PathBuf) {

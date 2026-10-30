@@ -111,6 +111,8 @@ impl Snapshot {
     }
 }
 
+static FIRST_NUMBERS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 pub struct Scheduler {
     kick: Notify,
     snap: Mutex<Snapshot>,
@@ -119,6 +121,21 @@ pub struct Scheduler {
 impl Scheduler {
     pub fn new() -> Self {
         Scheduler { kick: Notify::new(), snap: Mutex::new(Snapshot::loading()) }
+    }
+
+    /// B3: при старте сразу показать последние цифры из кеша — серыми («устаревшие»),
+    /// пока не придёт свежий ответ. Вызывать до запуска run().
+    pub fn seed_from_cache(&self) {
+        if let Some((usage, at)) = crate::cache::load(now_ms()) {
+            let mut g = self.snap.lock().unwrap();
+            g.usage = Some(usage);
+            g.updated_at_ms = Some(at);
+            applog::info(format!(
+                "perf: цифры из кеша через {} мс от старта (возраст {} мин)",
+                applog::since_start_ms(),
+                now_ms().saturating_sub(at) / 60_000
+            ));
+        }
     }
 
     pub fn snapshot(&self) -> Snapshot {
@@ -133,6 +150,11 @@ impl Scheduler {
             g.account_name = if g.state == "signed_out" { None } else { name };
             g.clone()
         };
+        // B3 (замеры): один раз за запуск — сколько прошло от старта до первых настоящих цифр.
+        // Строку забирает tools\perf.ps1 в logs\perf.txt.
+        if s.state == "ok" && !FIRST_NUMBERS.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            applog::info(format!("perf: первые цифры через {} мс от старта", applog::since_start_ms()));
+        }
         crate::views::on_snapshot(app, &s);
         emit_ui(app, "usage-updated", s);
     }
@@ -247,6 +269,7 @@ async fn cycle(app: &AppHandle, failures: u32) -> (Plan, u32) {
                 };
             });
             alerts::on_usage(app, &usage);
+            crate::cache::save(&usage, now_ms());
             refresh_account_name(app, &key, &settings, &org).await;
             (plan, 0)
         }

@@ -322,3 +322,34 @@ pub fn open_log(window: WebviewWindow) -> CmdResult<()> {
         .map(|_| ())
         .map_err(|e| i18n::tf("err.log_open", &[("e", &e)]))
 }
+
+/// B3 (лёгкость): панель скрыта → попросить WebView2 держать меньше памяти, видна → обычный
+/// режим. Вызывает main.js по visibilitychange. На старых WebView2 (без ICoreWebView2_19)
+/// и не на Windows ничего не делает.
+#[tauri::command]
+pub fn webview_low_memory(window: WebviewWindow, low: bool) -> CmdResult<()> {
+    only_main(&window)?;
+    #[cfg(windows)]
+    {
+        let _ = window.with_webview(move |pv| unsafe {
+            use webview2_com::Microsoft::Web::WebView2::Win32::{
+                ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
+                COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+            };
+            use windows_core::Interface;
+            if let Ok(core) = pv.controller().CoreWebView2() {
+                if let Ok(c19) = core.cast::<ICoreWebView2_19>() {
+                    let level = if low {
+                        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+                    } else {
+                        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
+                    };
+                    let _ = c19.SetMemoryUsageTargetLevel(level);
+                }
+            }
+        });
+    }
+    #[cfg(not(windows))]
+    let _ = low;
+    Ok(())
+}

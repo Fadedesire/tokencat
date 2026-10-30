@@ -15,6 +15,7 @@ mod api;
 mod applog;
 mod auth;
 mod autostart;
+mod cache;
 mod commands;
 mod instance;
 mod overlay;
@@ -34,6 +35,7 @@ use tauri::Manager;
 use profile::Profile;
 
 fn main() {
+    applog::mark_start();
     // `--profile <имя>` — копия программы для другого аккаунта (profile.rs)
     let profile = Profile::from_args(std::env::args().skip(1));
     let keyring_account = profile.keyring_account();
@@ -79,6 +81,9 @@ fn main() {
 
             let handle = app.handle().clone();
             shell::migrate_onboarding(&handle);
+            // B3: последние цифры с диска — панель открывается уже с ними
+            cache::init(cfg_dir.clone());
+            app.state::<scheduler::Scheduler>().seed_from_cache();
             tauri::async_runtime::spawn(scheduler::run(handle.clone()));
             // macOS: программа живёт в строке меню, без значка в Dock (как LSUIElement)
             #[cfg(target_os = "macos")]
@@ -132,6 +137,7 @@ fn main() {
             commands::profile_add,
             commands::profile_remove,
             commands::open_log,
+            commands::webview_low_memory,
             overlay::overlay_fit,
             views::panel_painted,
             overlay::overlay_menu

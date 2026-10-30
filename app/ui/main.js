@@ -177,7 +177,15 @@ TokenCat.i18n.ready.then(function () {
     render();
   });
 
-  setInterval(() => panel.tick(), 1000);
+  // Отсчёт «до сброса» раз в секунду — только когда панель видна (B3, лёгкость)
+  setInterval(() => { if (!document.hidden) panel.tick(); }, 1000);
+  // Панель скрыта — WebView2 держит меньше памяти (B3)
+  const lowMem = () => invoke("webview_low_memory", { low: document.hidden }).catch(() => {});
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) panel.tick();
+    lowMem();
+  });
+  lowMem();
 
   (async () => {
     try { applySettings(await invoke("settings_get")); } catch (_) {}
