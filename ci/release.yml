@@ -11,6 +11,16 @@ name: release
 on:
   push:
     tags: ["v*"]
+  # Ручной перезапуск: Actions → release → Run workflow → тег (напр. v0.9.1).
+  # Берёт исправленный workflow из main, а код — из тега. Не нужно поднимать версию.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Тег, например v0.9.1"
+        required: true
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 permissions:
   contents: write
@@ -24,11 +34,13 @@ jobs:
       version: ${{ steps.ver.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
 
       - name: Version matches tag
         id: ver
         run: |
-          tag="${GITHUB_REF_NAME#v}"
+          tag="${TAG#v}"
           conf=$(jq -r .version app/src-tauri/tauri.conf.json)
           cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' app/src-tauri/Cargo.toml | head -1)
           echo "tag=$tag tauri.conf=$conf Cargo.toml=$cargo"
@@ -52,11 +64,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
-            gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
-              --title "TokenCat $GITHUB_REF_NAME" --notes-file ci/release-notes.md
-          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name==\"$GITHUB_REF_NAME\") | .id" | head -1)
-          if [ -z "$id" ]; then echo "::error::Не нашёл черновик релиза $GITHUB_REF_NAME"; exit 1; fi
+          # Есть черновик/релиз на этот тег — берём его id, нет — создаём и берём id из ответа
+          id=$(gh release view "$TAG" --json databaseId --jq .databaseId 2>/dev/null || true)
+          if [ -z "$id" ]; then
+            id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$TAG" -f name="TokenCat $TAG" -F draft=true \
+              -f body="$(cat ci/release-notes.md)" --jq .id)
+          fi
+          if [ -z "$id" ]; then echo "::error::Не нашёл черновик релиза $TAG"; exit 1; fi
           echo "Черновик: id=$id"
           echo "id=$id" >> "$GITHUB_OUTPUT"
 
@@ -75,6 +90,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
 
       - uses: actions/setup-node@v4
         with:
@@ -106,8 +123,8 @@ jobs:
           projectPath: app
           # Загрузка в черновик: по id, а если его нет — по тегу (иначе action молча ничего не грузит)
           releaseId: ${{ needs.draft.outputs.id }}
-          tagName: ${{ github.ref_name }}
-          releaseName: TokenCat ${{ github.ref_name }}
+          tagName: ${{ env.TAG }}
+          releaseName: TokenCat ${{ env.TAG }}
           releaseDraft: true
           includeUpdaterJson: true
           uploadUpdaterJson: true
@@ -135,7 +152,7 @@ jobs:
           Copy-Item app/src-tauri/target/release/tokencat.exe portable/TokenCat.exe
           $zip = "TokenCat_${v}_x64-portable.zip"
           Compress-Archive -Path portable/TokenCat.exe -DestinationPath $zip -Force
-          gh release upload "${{ github.ref_name }}" $zip --clobber
+          gh release upload "${{ env.TAG }}" $zip --clobber
 
       # Контрольные суммы — для winget/Homebrew и для тех, кто проверяет файлы
       - name: Checksums
@@ -155,4 +172,4 @@ jobs:
             (cd "$(dirname "$f")" && $sum "$(basename "$f")") >> "sums/SHA256SUMS-${{ matrix.name }}.txt"
           done
           cat sums/*.txt
-          gh release upload "${{ github.ref_name }}" sums/*.txt --clobber
+          gh release upload "${{ env.TAG }}" sums/*.txt --clobber
