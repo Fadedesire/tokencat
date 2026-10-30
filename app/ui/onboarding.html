@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Онбординг первого запуска (B1, п. 7): ОС → вид → вход → автозапуск.
+  <!-- Онбординг первого запуска (B1, п. 7): ОС → вид → вход → ранний старт (B9) → автозапуск.
        У добавленного аккаунта (второй профиль) — только вход и автозапуск.
        Логика — onboarding.js. -->
   <main class="onb">
@@ -51,7 +51,22 @@
       </div>
     </section>
 
-    <!-- 4. Автозапуск -->
+    <!-- 4. Ранний старт (B9): зачем, кому нужно, во сколько. По умолчанию вкл. -->
+    <section class="step" data-step="early" hidden>
+      <h1>Ранний старт 5-часового окна</h1>
+      <p class="lead">Окно 5 ч начинается с первого сообщения. Если запустить его рано утром,
+        лимит обновится посреди рабочего дня: выработали до сброса — получили свежий.</p>
+      <div class="timeline" id="timeline" aria-hidden="true"></div>
+      <div class="who">
+        <div><b class="ok">Стоит включить</b>, если работаете с Claude днём и упираетесь
+          в 5-часовой лимит.</div>
+        <div><b>Можно не включать</b>, если до лимита доходите редко. Запрос крошечный —
+          лимит почти не тратит.</div>
+      </div>
+      <div class="box" id="early-box"></div>
+    </section>
+
+    <!-- 5. Автозапуск -->
     <section class="step" data-step="autostart" hidden>
       <h1>Почти готово</h1>
       <p class="lead">Панель появится в правом верхнем углу экрана. Её можно перетащить мышкой,
@@ -72,6 +87,9 @@
   </main>
   <script src="cat.js"></script>
   <script src="components.js"></script>
+  <script src="early.js"></script>
+  <script src="catfacts.js"></script>
+  <script src="earlyui.js"></script>
   <script src="onboarding.js"></script>
 </body>
 </html>

@@ -133,6 +133,39 @@
   cursor: pointer; text-decoration: underline; text-underline-offset: 2px; flex: none;
 }
 
+/* ---- Облачко котика: факт дня (B9). Хвостик вверх — к котику на разделителе ---- */
+.tc-fact {
+  position: relative;
+  margin: 8px var(--tc-pad) 2px;
+  padding: 6px 9px;
+  background: var(--tc-raise);
+  border: 1px solid var(--tc-border-strong);
+  border-radius: 9px;
+  font-size: var(--tc-fs-small);
+  line-height: 1.35;
+  color: var(--tc-text);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.tc-fact[hidden] { display: none; }
+.tc-fact::before, .tc-fact::after {     /* хвостик: рамка + заливка */
+  content: "";
+  position: absolute;
+  right: 22px;
+  border: 6px solid transparent;
+  border-top: 0;
+}
+.tc-fact::before { top: -7px; border-bottom: 7px solid var(--tc-border-strong); }
+.tc-fact::after  { top: -5px; border-bottom: 6px solid var(--tc-raise); right: 22px; }
+.tc-fact:hover { background: var(--tc-raise-hover); }
+.tc-fact:hover::after { border-bottom-color: var(--tc-raise-hover); }
+.tc-fact.show { animation: tc-fact-in 260ms cubic-bezier(.2, .8, .3, 1) both; transform-origin: 90% 0; }
+@keyframes tc-fact-in {
+  from { opacity: 0; transform: translateY(-4px) scale(.92); }
+  to   { opacity: 1; transform: none; }
+}
+
 /* Доля недели по продуктам — необязательная строка */
 .tc-note {
   padding: 2px var(--tc-pad) 0;
@@ -144,4 +177,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tc-fill { transition: none; }
+  .tc-fact.show { animation: none; }
 }

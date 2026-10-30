@@ -133,7 +133,7 @@ pub fn open_onboarding(app: &AppHandle) {
     }
     let r = WebviewWindowBuilder::new(app, ONBOARDING_LABEL, WebviewUrl::App("onboarding.html".into()))
         .title(window_title(app, "добро пожаловать"))
-        .inner_size(560.0, 520.0)
+        .inner_size(560.0, 580.0)
         .resizable(false)
         .maximizable(false)
         .minimizable(false)

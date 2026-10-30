@@ -61,6 +61,15 @@ pub struct Settings {
     /// О каком уровне 5-часового лимита уже сообщили: 0, 80 или 100 (чтобы после
     /// перезапуска не повторять уведомление)
     pub notify_level: u8,
+    /// Ранний старт 5-часового окна (B9): задачу в Claude ставит пользователь по нашей
+    /// инструкции, TokenCat только подсказывает время и проверяет сброс. По умолчанию вкл.
+    pub early_start: bool,
+    /// Час, к которому пользователь хочет сброс 5-часового лимита (0–23)
+    pub early_reset_hour: u8,
+    /// Облачко котика с фактом дня (B9)
+    pub cat_fact: bool,
+    /// День («2026-10-30», местное время), когда облачко закрыли кликом — до завтра не показываем
+    pub fact_hidden_day: Option<String>,
 }
 
 impl Default for Settings {
@@ -82,6 +91,10 @@ impl Default for Settings {
             account_name: None,
             account_name_at: None,
             notify_level: 0,
+            early_start: true,
+            early_reset_hour: DEFAULT_RESET_HOUR,
+            cat_fact: true,
+            fact_hidden_day: None,
         }
     }
 }
@@ -114,8 +127,26 @@ impl Settings {
             self.notify_level = 0;
         }
         self.account_name = self.account_name.as_deref().and_then(clean_account_name);
+        if self.early_reset_hour > 23 {
+            self.early_reset_hour = DEFAULT_RESET_HOUR;
+        }
+        if !self.fact_hidden_day.as_deref().is_some_and(is_day_key) {
+            self.fact_hidden_day = None;
+        }
         self
     }
+}
+
+/// Сброс 5-часового лимита по умолчанию — в 11:00 (задача в 6:01), пример из B9.
+pub const DEFAULT_RESET_HOUR: u8 = 11;
+
+/// Ключ дня «ГГГГ-ММ-ДД».
+pub fn is_day_key(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() == 10
+        && b[4] == b'-'
+        && b[7] == b'-'
+        && b.iter().enumerate().all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
 }
 
 /// Имя аккаунта для показа: без почты, без пробелов по краям, не длиннее 64 символов
@@ -325,6 +356,21 @@ mod tests {
         assert_eq!(bad.notify_level, 0);
         assert_eq!(bad.account_name, None);
         assert_eq!(clean_account_name("  Рома  ").as_deref(), Some("Рома"));
+
+        // B9: ранний старт по умолчанию включён, сброс в 11; мусор в файле чиним
+        assert!(s.early_start && s.cat_fact);
+        assert_eq!(s.early_reset_hour, 11);
+        let b9 = Settings {
+            early_reset_hour: 24,
+            fact_hidden_day: Some("вчера".into()),
+            ..Settings::default()
+        }
+        .sanitized();
+        assert_eq!(b9.early_reset_hour, 11);
+        assert_eq!(b9.fact_hidden_day, None);
+        assert!(is_day_key("2026-10-30"));
+        assert!(!is_day_key("2026-1-30"));
+        assert!(!is_day_key("2026/10/30"));
         assert_eq!(clean_account_name(&"я".repeat(100)).unwrap().chars().count(), 64);
     }
 }

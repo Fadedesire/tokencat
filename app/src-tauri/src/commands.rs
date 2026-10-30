@@ -7,7 +7,7 @@ use tauri::{AppHandle, Manager, WebviewWindow};
 use crate::auth::only_main;
 use crate::profile::Profile;
 use crate::scheduler::{self, Scheduler, Snapshot};
-use crate::settings::{normalize_proxy, SettingsStore, INTERVALS, LANGS, MENUBAR_STYLES, VIEWS};
+use crate::settings::{is_day_key, normalize_proxy, SettingsStore, INTERVALS, LANGS, MENUBAR_STYLES, VIEWS};
 use crate::{alerts, applog, autostart, shell};
 
 type CmdResult<T> = Result<T, String>;
@@ -52,6 +52,11 @@ pub struct SettingsView {
     pub version: &'static str,
     /// windows | macos
     pub os: &'static str,
+    /// Ранний старт 5-часового окна и котофакт (B9)
+    pub early_start: bool,
+    pub early_reset_hour: u8,
+    pub cat_fact: bool,
+    pub fact_hidden_day: Option<String>,
 }
 
 pub fn view(app: &AppHandle) -> SettingsView {
@@ -78,6 +83,10 @@ pub fn view(app: &AppHandle) -> SettingsView {
         profiles_count: shell::known_profiles(app).len(),
         version: env!("CARGO_PKG_VERSION"),
         os: if cfg!(target_os = "macos") { "macos" } else { "windows" },
+        early_start: s.early_start,
+        early_reset_hour: s.early_reset_hour,
+        cat_fact: s.cat_fact,
+        fact_hidden_day: s.fact_hidden_day,
     }
 }
 
@@ -108,6 +117,11 @@ pub struct SettingsPatch {
     pub notify: Option<bool>,
     pub autostart: Option<bool>,
     pub language: Option<String>,
+    pub early_start: Option<bool>,
+    pub early_reset_hour: Option<u8>,
+    pub cat_fact: Option<bool>,
+    /// «ГГГГ-ММ-ДД» — облачко закрыли в этот день
+    pub fact_hidden_day: Option<String>,
 }
 
 #[tauri::command]
@@ -132,6 +146,12 @@ pub fn settings_set(window: WebviewWindow, app: AppHandle, patch: SettingsPatch)
         if !LANGS.contains(&l.as_str()) {
             return Err("Такой язык не поддерживается".into());
         }
+    }
+    if patch.early_reset_hour.is_some_and(|h| h > 23) {
+        return Err("Час сброса — от 0 до 23".into());
+    }
+    if patch.fact_hidden_day.as_deref().is_some_and(|d| !is_day_key(d)) {
+        return Err("Неверная дата".into());
     }
     let proxy = match &patch.proxy {
         Some(p) => Some(normalize_proxy(p).map_err(String::from)?),
@@ -171,6 +191,18 @@ pub fn settings_set(window: WebviewWindow, app: AppHandle, patch: SettingsPatch)
         if let Some(l) = patch.language {
             s.language = l;
         }
+        if let Some(b) = patch.early_start {
+            s.early_start = b;
+        }
+        if let Some(h) = patch.early_reset_hour {
+            s.early_reset_hour = h;
+        }
+        if let Some(b) = patch.cat_fact {
+            s.cat_fact = b;
+        }
+        if let Some(d) = patch.fact_hidden_day {
+            s.fact_hidden_day = Some(d);
+        }
     })?;
     if before.interval_secs != after.interval_secs {
         applog::info(format!("интервал обновления: {} с", after.interval_secs));
@@ -193,6 +225,15 @@ pub fn settings_set(window: WebviewWindow, app: AppHandle, patch: SettingsPatch)
     }
     if before.view != after.view {
         crate::views::apply(&app);
+    }
+    if before.early_start != after.early_start
+        || before.early_reset_hour != after.early_reset_hour
+        || before.cat_fact != after.cat_fact
+    {
+        applog::info(format!(
+            "ранний старт: {}, сброс в {}:00, котофакт: {}",
+            after.early_start, after.early_reset_hour, after.cat_fact
+        ));
     }
     if before.menubar_style != after.menubar_style {
         applog::info(format!("строка меню: {}", after.menubar_style));

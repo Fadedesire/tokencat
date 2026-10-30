@@ -158,9 +158,42 @@
         const id = this.msgBtn.dataset.action;
         if (id && this.opts.onAction) this.opts.onAction(id);
       });
-      this.root.append(head, this.rowsBox, this.note, this.msg);
+      // Облачко котика с фактом дня (B9): под шапкой, хвостик тянется к котику
+      this.fact = el("div", "tc-fact"); this.fact.hidden = true;
+      this.factText = el("span", "tc-fact-text");
+      this.fact.appendChild(this.factText);
+      this.fact.title = "Нажмите, чтобы закрыть до завтра";
+      // mousedown, а не click: иначе нажатие на панели начинает перетаскивание окна
+      this.fact.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        e.stopPropagation();
+        const cb = this.onFactClose;
+        this.setFact(null);
+        if (cb) cb();
+      });
+      this.root.append(head, this.fact, this.rowsBox, this.note, this.msg);
       this.rows = [];
       this.override = null;
+    }
+
+    /**
+     * Облачко с фактом дня. text=null — спрятать. onClose — когда закрыли кликом.
+     * Появляется плавно; без котика облачко не показываем (говорить некому).
+     */
+    setFact(text, onClose) {
+      const on = !!text && !!this.cat;
+      this.onFactClose = on ? onClose || null : null;
+      if (!on) {
+        this.fact.hidden = true;
+        this.fact.classList.remove("show");
+        return;
+      }
+      if (this.factText.textContent === text && !this.fact.hidden) return;
+      this.factText.textContent = text;
+      this.fact.hidden = false;
+      this.fact.classList.remove("show");
+      void this.fact.offsetWidth;          // перезапустить анимацию появления
+      this.fact.classList.add("show");
     }
 
     /** Котик в шапке: включить/выключить без пересоздания панели (настройка «Котик»). */
@@ -175,6 +208,7 @@
         this.cat.destroy();
         this.cat.canvas.remove();
         this.cat = null;
+        if (this.fact) this.setFact(null);
       }
       this.root.classList.toggle("tc-no-cat", !this.cat);
     }

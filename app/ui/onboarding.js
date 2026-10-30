@@ -1,4 +1,5 @@
-// Онбординг первого запуска (B1, п. 7). Шаги: привет и ОС → вид → вход → автозапуск.
+// Онбординг первого запуска (B1, п. 7). Шаги: привет и ОС → вид → вход → ранний старт (B9) →
+// автозапуск.
 // Добавленный аккаунт (не основной профиль) проходит только вход и автозапуск.
 // «Готово» (или крестик окна) — онбординг пройден, больше не показывается;
 // повторить можно в настройках («Пройти заново»).
@@ -192,11 +193,49 @@
     if (steps[at] === "login") renderLogin();
   });
 
-  // ---------- 4. Готово ----------
+  // ---------- 4. Ранний старт (B9) ----------
+  // Выбор хранится в early.st и сохраняется по «Готово» вместе с остальным
+  const early = new TokenCat.ui.EarlyStart({ onChange: () => renderTimeline() });
+  $("early-box").appendChild(early.root);
+
+  /** Таймлайн: запрос задачи → сели работать (через 3 ч) → сброс. */
+  function renderTimeline() {
+    const E = TokenCat.early;
+    const h = early.st.early_reset_hour;
+    const on = early.st.early_start;
+    const t = E.taskTime(h);
+    const work = (h + 22) % 24;               // за 2 ч до сброса
+    const box = $("timeline");
+    box.innerHTML = "";
+    box.classList.toggle("off", !on);
+    const pts = [
+      { at: 0, time: E.hhmm(t.h, t.m), text: "задача шлёт запрос" },
+      { at: 60, time: E.hhmm(work, 0), text: "вы сели работать" },
+      { at: 100, time: E.hhmm(h, 0), text: "сброс — лимит снова 0 %" },
+    ];
+    const line = document.createElement("div");
+    line.className = "tl-line";
+    box.appendChild(line);
+    for (const p of pts) {
+      const d = document.createElement("div");
+      d.className = "tl-pt";
+      d.style.left = p.at + "%";
+      const b = document.createElement("b");
+      b.textContent = p.time;
+      const s = document.createElement("span");
+      s.textContent = p.text;
+      d.append(b, s);
+      box.appendChild(d);
+    }
+  }
+
+  // ---------- 5. Готово ----------
   async function finish() {
     $("next").disabled = true;
     try {
       if (view !== st.view) await invoke("settings_set", { patch: { view } });
+      // Ранний старт: по умолчанию вкл (решение Ромы 30.10) — сохраняем как выбрано на шаге
+      await invoke("settings_set", { patch: { early_start: early.st.early_start, early_reset_hour: early.st.early_reset_hour } });
       await invoke("onboarding_finish", { autostart: $("autostart").checked });
     } catch (e) {
       // Сюда попадаем, только если не сохранились настройки (окно тогда не закрылось)
@@ -217,13 +256,15 @@
     view = st.view;
     // Автозапуск в онбординге всегда предлагаем включённым (решение Ромы 29.10)
     $("autostart").checked = true;
+    early.set(st);
+    renderTimeline();
     if (st.profile_default) {
-      steps = ["hello", "view", "login", "autostart"];
+      steps = ["hello", "view", "login", "early", "autostart"];
       initHello();
       initCards();
     } else {
       // Второй аккаунт: ОС и вид уже выбраны в основном
-      steps = ["login", "autostart"];
+      steps = ["login", "early", "autostart"];
       $("login-title").textContent = "Новый аккаунт";
       $("login-lead").textContent = "Войдите в другой аккаунт claude.ai — у этой панели будут свои лимиты. " +
         "Окно входа откроется «с чистого листа», первый аккаунт не пострадает.";

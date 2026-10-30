@@ -40,6 +40,10 @@
   });
   $("panel-slot").appendChild(panel.root);
 
+  // Ранний старт (B9): переключатель, час сброса, проверка, инструкция
+  const early = new TokenCat.ui.EarlyStart({ status: true, onChange: (patch) => set(patch) });
+  $("early-box").appendChild(early.root);
+
   function note(id, text, cls) {
     const el = $(id);
     el.hidden = !text;
@@ -152,6 +156,15 @@
     renderViews();
     $("on-top").checked = v.always_on_top;
     $("show-cat").checked = v.show_cat;
+    $("cat-fact").checked = v.cat_fact;
+    $("cat-fact").disabled = !v.show_cat;
+    early.set(v);
+    // Котофакт в превью панели — тот же, что на рабочем столе (закрыть можно и здесь)
+    const E = TokenCat.early;
+    panel.setCat(v.show_cat);
+    panel.setFact(E.showFact({ enabled: v.cat_fact, cat: v.show_cat, hiddenDay: v.fact_hidden_day })
+      ? E.factOfDay(TokenCat.catFacts) : null,
+      () => set({ fact_hidden_day: E.dayKey() }));
     $("notify").checked = v.notify;
     $("autostart").checked = v.autostart;
     fillSelect($("interval"), v.intervals, v.interval_secs, intervalName);
@@ -184,6 +197,7 @@
   $("menubar-style").onchange = (e) => set({ menubar_style: e.target.value });
   $("show-cat").onchange = (e) => set({ show_cat: e.target.checked });
   $("notify").onchange = (e) => set({ notify: e.target.checked });
+  $("cat-fact").onchange = (e) => set({ cat_fact: e.target.checked });
   $("autostart").onchange = (e) => set({ autostart: e.target.checked });
   $("interval").onchange = (e) => set({ interval_secs: Number(e.target.value) });
   $("language").onchange = (e) => set({ language: e.target.value });
@@ -232,6 +246,7 @@
 
   listen("usage-updated", (ev) => {
     snap = ev.payload;
+    early.setUsage(snap);
     // Планировщик заметил вход/выход раньше UI — перечитаем состояние входа
     const signedIn = snap.state !== "signed_out";
     if (signedIn !== auth.signed_in) loadAuth().then(render);
@@ -253,7 +268,7 @@
 
   (async () => {
     await loadAuth();
-    try { snap = await invoke("usage_snapshot"); } catch (_) {}
+    try { snap = await invoke("usage_snapshot"); early.setUsage(snap); } catch (_) {}
     try { applyView(await invoke("settings_get")); } catch (e) { note("sys-msg", String(e), "bad"); }
     render();
     try { goTo(await invoke("settings_goto")); } catch (_) {}

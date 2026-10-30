@@ -44,14 +44,39 @@
     fit();
   };
 
-  // Настройки, которые видны на панели: котик
+  // Настройки, которые видны на панели: котик, котофакт
+  let settings = null;
   function applySettings(st) {
     if (!st) return;
+    settings = st;
     popup = st.view !== "overlay";
     document.body.classList.toggle("popup", popup);
     panel.setCat(st.show_cat !== false);
+    updateFact();
     fit();
   }
+
+  // ---- Котофакт дня (B9): облачко раз в день, клик — спрятать до завтра ----
+  const early = TokenCat.early;
+  function updateFact() {
+    const st = settings;
+    const show = st && early && early.showFact({
+      enabled: st.cat_fact, cat: st.show_cat !== false, hiddenDay: st.fact_hidden_day,
+    });
+    if (!show) { panel.setFact(null); fit(); return; }
+    panel.setFact(early.factOfDay(TokenCat.catFacts), () => {
+      fit();
+      invoke("settings_set", { patch: { fact_hidden_day: early.dayKey() } }).catch(() => {});
+    });
+    fit();
+  }
+  // Новый день наступил — показать новый факт (проверка раз в минуту, без запросов)
+  let factDay = early ? early.dayKey() : "";
+  setInterval(() => {
+    if (!early) return;
+    const d = early.dayKey();
+    if (d !== factDay) { factDay = d; updateFact(); }
+  }, 60e3);
 
   async function loadAuth() {
     try { auth = await invoke("auth_status"); }

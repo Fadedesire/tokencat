@@ -77,7 +77,21 @@
           </div>
           <label class="switch"><input id="show-cat" type="checkbox"><i></i></label>
         </div>
+        <div class="item" id="cat-fact-row">
+          <div class="text">Котофакт дня
+            <small>Раз в день котик рассказывает факт о котах. Клик по облачку — спрятать до завтра.</small>
+          </div>
+          <label class="switch"><input id="cat-fact" type="checkbox"><i></i></label>
+        </div>
       </div>
+    </section>
+
+    <section class="group" id="early">
+      <h2>Ранний старт</h2>
+      <div class="box" id="early-box"></div>
+      <p class="muted small hint">5-часовое окно начинается с первого сообщения. Если его запустит
+        утренняя задача в Claude, лимит сбросится как раз посреди рабочего дня — можно выработать
+        его до сброса и получить свежий.</p>
     </section>
 
     <section class="group">
@@ -164,6 +178,9 @@
   </main>
   <script src="cat.js"></script>
   <script src="components.js"></script>
+  <script src="early.js"></script>
+  <script src="catfacts.js"></script>
+  <script src="earlyui.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>
