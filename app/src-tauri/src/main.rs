@@ -147,6 +147,7 @@ fn main() {
             commands::profile_add,
             commands::profile_remove,
             commands::open_log,
+            commands::open_link,
             commands::webview_low_memory,
             commands::update_status,
             commands::update_check,

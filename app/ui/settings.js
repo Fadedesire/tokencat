@@ -258,10 +258,12 @@ TokenCat.i18n.ready.then(function () {
   listen("update-changed", (ev) => renderUpd(ev.payload));
   invoke("update_status").then(renderUpd).catch(() => {});
 
-  // Ссылки на донаты и обратную связь появятся в блоках B6–B7
-  const soon = () => note("about-msg", T("about.soon"), "muted");
-  $("donate").onclick = soon;
-  $("report").onclick = soon;
+  // «Поддержать» (Ko-fi) и «Сообщить о проблеме» (GitHub Issues) — адреса в Rust (B7)
+  const link = (kind) => invoke("open_link", { kind })
+    .then((ok) => { if (!ok) note("about-msg", T("about.soon"), "muted"); })
+    .catch((e) => note("about-msg", String(e), "bad"));
+  $("donate").onclick = () => link("donate");
+  $("report").onclick = () => link("report");
 
   // Прокрутить к разделу (пункт «Поддержать проект» в меню)
   function goTo(section) {

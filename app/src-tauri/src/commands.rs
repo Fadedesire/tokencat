@@ -387,3 +387,42 @@ pub async fn update_install(window: WebviewWindow, app: AppHandle) -> CmdResult<
     only_main(&window)?;
     crate::updater::install(&app).await
 }
+
+/// Ссылка «Поддержать проект» (B7). Пока пусто — кнопка показывает «ссылки появятся скоро».
+pub const DONATE_URL: &str = "";
+/// «Сообщить о проблеме» — новая задача в репозитории.
+pub const REPORT_URL: &str = "https://github.com/Fadedesire/tokencat/issues/new";
+
+/// Открыть ссылку из раздела «О программе». Только из списка выше: окно не может
+/// попросить открыть произвольный адрес. `false` — ссылки пока нет.
+#[tauri::command]
+pub fn open_link(window: WebviewWindow, kind: String) -> CmdResult<bool> {
+    only_main(&window)?;
+    let url = link_url(&kind).ok_or_else(|| format!("unknown link: {kind}"))?;
+    if url.is_empty() {
+        return Ok(false);
+    }
+    crate::updater::open_url(url);
+    Ok(true)
+}
+
+fn link_url(kind: &str) -> Option<&'static str> {
+    match kind {
+        "donate" => Some(DONATE_URL),
+        "report" => Some(REPORT_URL),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn links_whitelist() {
+        assert!(link_url("report").unwrap().starts_with("https://github.com/"));
+        let d = link_url("donate").unwrap();
+        assert!(d.is_empty() || d.starts_with("https://ko-fi.com/"));
+        assert!(link_url("https://evil.example").is_none());
+    }
+}
