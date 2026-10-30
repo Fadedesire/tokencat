@@ -132,8 +132,10 @@ jobs:
           else
             files=$(ls app/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
           fi
+          # В Git Bash на Windows нет shasum, на macOS нет sha256sum — берём, что есть
+          if command -v sha256sum >/dev/null; then sum="sha256sum"; else sum="shasum -a 256"; fi
           for f in $files; do
-            (cd "$(dirname "$f")" && shasum -a 256 "$(basename "$f")") >> "sums/SHA256SUMS-${{ matrix.name }}.txt"
+            (cd "$(dirname "$f")" && $sum "$(basename "$f")") >> "sums/SHA256SUMS-${{ matrix.name }}.txt"
           done
           cat sums/*.txt
           gh release upload "${{ github.ref_name }}" sums/*.txt --clobber
