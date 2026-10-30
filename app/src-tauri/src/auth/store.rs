@@ -29,7 +29,7 @@ impl KeyringStore {
     }
 
     fn entry(&self) -> Result<keyring::Entry, String> {
-        keyring::Entry::new(SERVICE, &self.account).map_err(|e| format!("Хранилище секретов: {e}"))
+        keyring::Entry::new(SERVICE, &self.account).map_err(|e| crate::i18n::tf("err.keyring", &[("e", &e)]))
     }
 }
 
@@ -45,20 +45,20 @@ impl SecretStore for KeyringStore {
                 }
             },
             Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(format!("Не удалось прочитать ключ из хранилища: {e}")),
+            Err(e) => Err(crate::i18n::tf("err.key_read", &[("e", &e)])),
         }
     }
 
     fn save(&self, key: &SessionKey) -> Result<(), String> {
         self.entry()?
             .set_password(key.expose())
-            .map_err(|e| format!("Не удалось сохранить ключ в хранилище: {e}"))
+            .map_err(|e| crate::i18n::tf("err.key_save", &[("e", &e)]))
     }
 
     fn delete(&self) -> Result<(), String> {
         match self.entry()?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(format!("Не удалось удалить ключ из хранилища: {e}")),
+            Err(e) => Err(crate::i18n::tf("err.key_delete", &[("e", &e)])),
         }
     }
 }

@@ -1,4 +1,4 @@
-// Тесты расчётов интерфейса (B9: ранний старт и котофакт). Запуск: node tools\test-ui.js
+// Тесты расчётов интерфейса (B9: ранний старт и котофакт; B3: словари и форматы времени). Запуск: node tools\test-ui.js
 // (это делает test.bat после cargo test). Каждый набор гоняется в нескольких часовых поясах:
 // процесс перезапускает сам себя с другим TZ — Node читает пояс при старте.
 "use strict";
@@ -25,8 +25,14 @@ if (!process.env.TC_TEST_CHILD) {
 }
 
 // ---------- Дочерний процесс: тесты в одном поясе ----------
+const fs = require("fs");
+const I = require(path.join(__dirname, "..", "app", "ui", "i18n.js"));
 const E = require(path.join(__dirname, "..", "app", "ui", "early.js"));
-const FACTS = require(path.join(__dirname, "..", "app", "ui", "catfacts.js"));
+const LOC = path.join(__dirname, "..", "app", "locales");
+const dictOf = (l) => JSON.parse(fs.readFileSync(path.join(LOC, l + ".json"), "utf8"));
+const RU = dictOf("ru");
+I.load(RU, "ru");
+const FACTS = RU.facts;
 const tz = process.env.TZ;
 let n = 0, bad = 0;
 function ok(cond, name) {
@@ -105,6 +111,41 @@ eq(E.taskLabel(14), "09:01", "подпись 14 → 09:01");
   ok(E.showFact({ enabled: true, cat: true, hiddenDay: "2026-10-29", now }), "закрыли вчера — снова показываем");
   ok(!E.showFact({ enabled: true, cat: false, hiddenDay: null, now }), "без котика — без облачка");
   ok(!E.showFact({ enabled: false, cat: true, hiddenDay: null, now }), "котофакт выключен");
+}
+
+// 6. Языки (B3): форматы «до сброса», подстановки, у всех языков есть факты и строки
+{
+  const now = L(2026, 10, 30, 10, 0);
+  const inMin = (m) => iso(now + m * 60e3);
+  eq(I.until(inMin(3 * 60 + 5), now), "3ч 05м", "RU 3ч 05м");
+  eq(I.until(inMin(4 * 1440 + 120), now), "4д 2ч", "RU 4д 2ч");
+  eq(I.until(inMin(45), now), "45м", "RU 45м");
+  eq(I.until(iso(now + 20e3), now), "<1м", "RU меньше минуты");
+  eq(I.until(inMin(-1), now), "сейчас", "RU сейчас");
+  eq(I.T("err.max_profiles", { n: 4 }), "Можно добавить не больше 4 аккаунтов", "подстановка {n}");
+  eq(I.T("нет.ключа"), "нет.ключа", "нет ключа — сам ключ");
+  const codes = fs.readdirSync(LOC).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -5));
+  ok(codes.length === 9, "9 языков, а не " + codes.length);
+  const EN = dictOf("en");
+  I.load(EN, "en");
+  eq(I.until(inMin(3 * 60 + 5), now), "3h 05m", "EN 3h 05m");
+  eq(I.until(inMin(4 * 1440 + 120), now), "4d 2h", "EN 4d 2h");
+  for (const c of codes) {
+    const d = dictOf(c);
+    ok(Array.isArray(d.facts) && d.facts.length === RU.facts.length, `${c}: ${RU.facts.length} фактов`);
+    ok(d.facts.every((f) => f.length <= 200), `${c}: факты короче 200 символов`);
+    ok(new Set(d.facts).size === d.facts.length, `${c}: факты не повторяются`);
+    for (const k of Object.keys(EN)) ok(k in d, `${c}: есть ${k}`);
+    // Формат «до сброса» не длиннее, чем влезает в колонку панели
+    I.load(d, c);
+    for (const m of [3 * 60 + 5, 6 * 1440 + 23 * 60, 59]) {
+      ok(I.until(inMin(m), now).length <= 9, `${c}: «${I.until(inMin(m), now)}» короткое`);
+    }
+    // Статус раннего старта собирается без потерянных подстановок
+    const s = E.status({ enabled: true, resetHour: 11, session: null, now: L(2026, 10, 30, 4, 0) }).text;
+    ok(/06:01/.test(s) && !/[{}]/.test(s), `${c}: статус раннего старта «${s}»`);
+  }
+  I.load(RU, "ru");
 }
 
 console.log(`[${tz}] ${n - bad}/${n} ок`);

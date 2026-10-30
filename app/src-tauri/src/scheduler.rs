@@ -99,7 +99,7 @@ impl Snapshot {
     fn loading() -> Self {
         Snapshot {
             state: "loading",
-            message: "Загружаю данные…".into(),
+            message: crate::i18n::t("panel.loading"),
             usage: None,
             org_name: None,
             account_name: None,
@@ -201,7 +201,7 @@ async fn cycle(app: &AppHandle, failures: u32) -> (Plan, u32) {
             sched.edit(app, |s| {
                 *s = Snapshot {
                     state: "signed_out",
-                    message: "Вы не вошли в claude.ai".into(),
+                    message: crate::i18n::t("panel.signed_out"),
                     fetching: false,
                     ..Snapshot::loading()
                 }

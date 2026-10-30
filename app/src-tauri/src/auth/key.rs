@@ -33,7 +33,7 @@ impl SessionKey {
         &self.0
     }
 
-    /// «sk-ant-sid01…Xy9 (108 символов)» — безопасно показывать в UI.
+    /// «sk-ant-sid01…Xy9 (108)» — безопасно показывать в UI (без слов — одинаково на всех языках).
     pub fn masked(&self) -> String {
         mask(&self.0)
     }
@@ -62,14 +62,14 @@ pub enum KeyError {
 
 impl KeyError {
     /// Текст для пользователя: что не так и что делать.
-    pub fn user_message(&self) -> &'static str {
-        match self {
-            KeyError::Empty => "Поле пустое. Вставьте значение cookie sessionKey.",
-            KeyError::WrongPrefix => "Это не похоже на ключ сессии: он начинается с sk-ant-sid.",
-            KeyError::TooShort => "Ключ слишком короткий — похоже, скопирован не целиком.",
-            KeyError::TooLong => "Ключ слишком длинный — похоже, вместе с ним скопировано лишнее.",
-            KeyError::BadChars => "В ключе есть лишние символы. Скопируйте только значение sessionKey.",
-        }
+    pub fn user_message(&self) -> String {
+        crate::i18n::t(match self {
+            KeyError::Empty => "key.empty",
+            KeyError::WrongPrefix => "key.prefix",
+            KeyError::TooShort => "key.short",
+            KeyError::TooLong => "key.long",
+            KeyError::BadChars => "key.chars",
+        })
     }
 }
 
@@ -122,11 +122,11 @@ pub fn normalize(raw: &str) -> Result<String, KeyError> {
 pub fn mask(s: &str) -> String {
     let n = s.chars().count();
     if n <= 16 {
-        return format!("••• ({n} символов)");
+        return format!("••• ({n})");
     }
     let head: String = s.chars().take(12).collect();
     let tail: String = s.chars().skip(n - 3).collect();
-    format!("{head}…{tail} ({n} символов)")
+    format!("{head}…{tail} ({n})")
 }
 
 #[cfg(test)]
@@ -179,10 +179,10 @@ mod tests {
         let k = SessionKey::from_trusted(GOOD).unwrap();
         let m = k.masked();
         assert!(m.starts_with("sk-ant-sid01"));
-        assert!(m.ends_with(&format!("({} символов)", GOOD.len())));
+        assert!(m.ends_with(&format!("({})", GOOD.len())));
         assert!(!m.contains("AbCdEfGh"));
         assert!(!format!("{:?}", k).contains("AbCdEfGh"));
         assert!(!format!("{}", k).contains("AbCdEfGh"));
-        assert_eq!(mask("short"), "••• (5 символов)");
+        assert_eq!(mask("short"), "••• (5)");
     }
 }

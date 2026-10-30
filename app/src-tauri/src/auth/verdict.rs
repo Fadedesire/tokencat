@@ -109,17 +109,17 @@ pub fn classify(info: &ResponseInfo) -> Verdict {
 
 impl Verdict {
     /// Текст для пользователя (SPEC, «Состояния и ошибки»).
-    pub fn user_message(self) -> &'static str {
-        match self {
-            Verdict::Ok => "Всё работает",
-            Verdict::SessionExpired => "Нужно войти заново",
-            Verdict::Blocked => "claude.ai недоступен из вашей сети. Проверьте VPN",
-            Verdict::RateLimited => "claude.ai просит подождать, повторю позже",
-            Verdict::ServerError => "claude.ai временно не отвечает, повторю позже",
-            Verdict::Unexpected => "Не удалось прочитать данные",
-            Verdict::Offline => "Нет соединения с claude.ai",
-            Verdict::Proxy => "Прокси не отвечает. Проверьте адрес прокси в настройках",
-        }
+    pub fn user_message(self) -> String {
+        crate::i18n::t(match self {
+            Verdict::Ok => "state.ok",
+            Verdict::SessionExpired => "state.expired",
+            Verdict::Blocked => "state.blocked",
+            Verdict::RateLimited => "state.rate",
+            Verdict::ServerError => "state.server",
+            Verdict::Unexpected => "state.unexpected",
+            Verdict::Offline => "state.offline",
+            Verdict::Proxy => "state.proxy",
+        })
     }
 }
 

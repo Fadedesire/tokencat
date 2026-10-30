@@ -6,32 +6,21 @@
 (function () {
   "use strict";
   const TC = (window.TokenCat = window.TokenCat || {});
+  const T = (k, a) => TC.i18n.T(k, a);
 
-  // Подписи лимитов. Незнакомые kind показываем как есть (S12 переведёт).
+  // Подписи лимитов — ключи словаря (B3). Незнакомые kind показываем как прислал claude.ai.
   const LABELS = {
-    session: "5 ч",
-    weekly_all: "Неделя",
-    weekly_sonnet: "Sonnet",
-    weekly_opus: "Opus",
+    session: "lim.session",
+    weekly_all: "lim.weekly",
+    weekly_sonnet: "lim.sonnet",
+    weekly_opus: "lim.opus",
   };
 
   /** Цвет полоски по порогам SPEC: 0–49 зелёный, 50–79 жёлтый, 80–100 красный. */
   function level(p) { return p >= 80 ? "red" : p >= 50 ? "yellow" : "green"; }
 
-  /** Время до сброса в стиле прототипа: «4ч 05м», «3д 4ч», «45м», «сейчас». */
-  function fmtUntil(iso, now = Date.now()) {
-    if (!iso) return "";
-    const t = Date.parse(iso);
-    if (isNaN(t)) return "";
-    const sec = Math.floor((t - now) / 1000);
-    if (sec <= 0) return "сейчас";
-    let m = Math.floor(sec / 60);
-    const h = Math.floor(m / 60) % 24, d = Math.floor(m / 1440);
-    m %= 60;
-    if (d) return `${d}д ${h}ч`;
-    if (h) return `${h}ч ${String(m).padStart(2, "0")}м`;
-    return m ? `${m}м` : "<1м";
-  }
+  /** Время до сброса: «4ч 05м», «3д 4ч», «45м», «сейчас» — формат языка (i18n.js). */
+  const fmtUntil = (iso, now) => TC.i18n.until(iso, now);
 
   function fmtClock(ms) {
     const d = new Date(ms);
@@ -70,7 +59,7 @@
     }
     set(limit) {
       const p = Math.min(100, Math.max(0, Number(limit.percent) || 0));
-      this.label.textContent = LABELS[limit.kind] || limit.label || limit.kind;
+      this.label.textContent = LABELS[limit.kind] ? T(LABELS[limit.kind]) : limit.label || limit.kind;
       this.root.title = this.label.textContent;
       this.fill.style.width = p + "%";
       this.fill.className = "tc-fill " + level(p);
@@ -81,7 +70,7 @@
       this.tick();
     }
     tick(now) {
-      this.until.textContent = this.notStarted ? "не начато" : fmtUntil(this.iso, now);
+      this.until.textContent = this.notStarted ? T("lim.not_started") : fmtUntil(this.iso, now);
     }
   }
 
@@ -92,7 +81,7 @@
    *   mood — настроение котика: idle | sleep | alert
    */
   function describe(snap) {
-    const s = snap || { state: "loading", message: "Загружаю данные…" };
+    const s = snap || { state: "loading", message: T("panel.loading") };
     const rows = limitsOf(s.usage);
     const has = rows.length > 0;
     const max = rows.reduce((a, l) => Math.max(a, Number(l.percent) || 0), 0);
@@ -101,21 +90,21 @@
     switch (s.state) {
       case "ok":
         r.dot = "ok";
-        if (!has) r.message = "Нет данных о лимитах";
+        if (!has) r.message = T("panel.no_data");
         break;
       case "loading":
-        r.message = s.message || "Загружаю данные…";
+        r.message = s.message || T("panel.loading");
         break;
       case "signed_out":
-        r.message = s.message || "Вы не вошли в claude.ai";
-        r.action = { id: "login", text: "Войти", primary: true };
+        r.message = s.message || T("panel.signed_out");
+        r.action = { id: "login", text: T("panel.login"), primary: true };
         r.mood = "sleep";
         r.rows = []; r.stale = false;
         break;
       case "expired":
         r.dot = "bad"; r.kind = "warn";
-        r.message = s.message || "Нужно войти заново";
-        r.action = { id: "login", text: "Войти заново", primary: true };
+        r.message = s.message || T("state.expired");
+        r.action = { id: "login", text: T("panel.relogin"), primary: true };
         break;
       case "blocked":
       case "offline":
@@ -124,11 +113,11 @@
         break;
       default:            // error: 429, 5xx, неожиданный ответ
         r.dot = has ? "warn" : "bad"; r.kind = "warn";
-        r.message = s.message || "Не удалось прочитать данные";
+        r.message = s.message || T("state.unexpected");
         break;
     }
-    if (s.show_log && !r.action) r.action = { id: "log", text: "Открыть лог", link: true };
-    if (s.fetching && !has && s.state !== "signed_out") r.message = "Обновляю…";
+    if (s.show_log && !r.action) r.action = { id: "log", text: T("panel.open_log"), link: true };
+    if (s.fetching && !has && s.state !== "signed_out") r.message = T("panel.updating");
     return r;
   }
 
@@ -162,7 +151,7 @@
       this.fact = el("div", "tc-fact"); this.fact.hidden = true;
       this.factText = el("span", "tc-fact-text");
       this.fact.appendChild(this.factText);
-      this.fact.title = "Нажмите, чтобы закрыть до завтра";
+      this.fact.title = T("fact.close_hint");
       // mousedown, а не click: иначе нажатие на панели начинает перетаскивание окна
       this.fact.addEventListener("mousedown", (e) => {
         if (e.button !== 0) return;
@@ -248,7 +237,7 @@
       const parts = ((snap && snap.usage && snap.usage.breakdown) || []).filter((b) => b.percent > 0);
       this.note.hidden = !(this.opts.breakdown && parts.length && d.rows.length);
       if (!this.note.hidden) {
-        this.note.textContent = "Неделя: " + parts.map((b) => `${b.name} ${Math.round(b.percent)}%`).join(" · ");
+        this.note.textContent = T("panel.week_parts", { parts: parts.map((b) => `${b.name} ${Math.round(b.percent)}%`).join(" · ") });
       }
 
       if (this.cat) this.cat.setMood(d.mood);

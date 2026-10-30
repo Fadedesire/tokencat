@@ -8,7 +8,7 @@ use crate::auth::only_main;
 use crate::profile::Profile;
 use crate::scheduler::{self, Scheduler, Snapshot};
 use crate::settings::{is_day_key, normalize_proxy, SettingsStore, INTERVALS, LANGS, MENUBAR_STYLES, VIEWS};
-use crate::{alerts, applog, autostart, shell};
+use crate::{alerts, applog, autostart, i18n, shell};
 
 type CmdResult<T> = Result<T, String>;
 
@@ -25,6 +25,15 @@ pub fn usage_refresh(window: WebviewWindow, app: AppHandle) -> CmdResult<()> {
     only_main(&window)?;
     scheduler::kick(&app);
     Ok(())
+}
+
+/// Словарь интерфейса на текущем языке (B3): `{ lang, dict }`. Окна берут его при загрузке
+/// (ui/i18n.js), при смене языка Rust шлёт `lang-changed`, и окна перезагружаются.
+#[tauri::command]
+pub fn i18n_get(window: WebviewWindow) -> CmdResult<serde_json::Value> {
+    only_main(&window)?;
+    let lang = i18n::lang();
+    Ok(serde_json::json!({ "lang": lang, "dict": i18n::merged(lang) }))
 }
 
 /// Всё, что нужно окнам о настройках. Секретов нет.
@@ -44,6 +53,8 @@ pub struct SettingsView {
     pub autostart: bool,
     pub language: String,
     pub languages: Vec<&'static str>,
+    /// Язык, который сейчас на экране (для "system" — язык системы)
+    pub lang: &'static str,
     pub onboarded: bool,
     pub account_name: Option<String>,
     pub profile_id: String,
@@ -76,6 +87,7 @@ pub fn view(app: &AppHandle) -> SettingsView {
         autostart: autostart::is_enabled(&p),
         language: s.language,
         languages: LANGS.to_vec(),
+        lang: i18n::lang(),
         onboarded: s.onboarded,
         account_name: s.account_name,
         profile_id: p.id().to_string(),
@@ -129,32 +141,32 @@ pub fn settings_set(window: WebviewWindow, app: AppHandle, patch: SettingsPatch)
     only_main(&window)?;
     if let Some(i) = patch.interval_secs {
         if !INTERVALS.contains(&i) {
-            return Err("Такой интервал не поддерживается".into());
+            return Err(i18n::t("err.interval"));
         }
     }
     if let Some(v) = &patch.view {
         if !VIEWS.contains(&v.as_str()) {
-            return Err("Этот вид недоступен на этой системе".into());
+            return Err(i18n::t("err.view"));
         }
     }
     if let Some(m) = &patch.menubar_style {
         if !MENUBAR_STYLES.contains(&m.as_str()) {
-            return Err("Такого вида строки меню нет".into());
+            return Err(i18n::t("err.menubar"));
         }
     }
     if let Some(l) = &patch.language {
         if !LANGS.contains(&l.as_str()) {
-            return Err("Такой язык не поддерживается".into());
+            return Err(i18n::t("err.lang"));
         }
     }
     if patch.early_reset_hour.is_some_and(|h| h > 23) {
-        return Err("Час сброса — от 0 до 23".into());
+        return Err(i18n::t("err.hour"));
     }
     if patch.fact_hidden_day.as_deref().is_some_and(|d| !is_day_key(d)) {
-        return Err("Неверная дата".into());
+        return Err(i18n::t("err.date"));
     }
     let proxy = match &patch.proxy {
-        Some(p) => Some(normalize_proxy(p).map_err(String::from)?),
+        Some(p) => Some(normalize_proxy(p).map_err(i18n::t)?),
         None => None,
     };
     // Автозапуск живёт в системе, а не в settings.json
@@ -219,8 +231,14 @@ pub fn settings_set(window: WebviewWindow, app: AppHandle, patch: SettingsPatch)
             after.show_cat, after.notify, after.language
         ));
     }
+    // Новый язык: меню и подписи пересоберёт settings_changed ниже, окна перезагрузятся
+    // по `lang-changed`, а сообщение панели обновит свежий запрос планировщика.
+    let lang_changed = before.language != after.language && i18n::set(&after.language).is_some();
+    if lang_changed {
+        shell::language_changed(&app);
+    }
     // Новый интервал или прокси — сразу проверяем, как работает
-    if before.interval_secs != after.interval_secs || before.proxy != after.proxy {
+    if before.interval_secs != after.interval_secs || before.proxy != after.proxy || lang_changed {
         scheduler::kick(&app);
     }
     if before.view != after.view {
@@ -291,7 +309,7 @@ pub async fn profile_remove(window: WebviewWindow, app: AppHandle) -> CmdResult<
 #[tauri::command]
 pub fn open_log(window: WebviewWindow) -> CmdResult<()> {
     only_main(&window)?;
-    let dir = applog::dir().ok_or("Лог ещё не создан")?;
+    let dir = applog::dir().ok_or_else(|| i18n::t("err.log_none"))?;
     #[cfg(target_os = "windows")]
     let prog = "explorer";
     #[cfg(target_os = "macos")]
@@ -302,5 +320,5 @@ pub fn open_log(window: WebviewWindow) -> CmdResult<()> {
         .arg(&dir)
         .spawn()
         .map(|_| ())
-        .map_err(|e| format!("Не удалось открыть папку лога: {e}"))
+        .map_err(|e| i18n::tf("err.log_open", &[("e", &e)]))
 }

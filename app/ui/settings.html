@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en" class="i18n">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TokenCat — настройки</title>
+  <title>TokenCat</title>
   <link rel="stylesheet" href="tokens.css">
   <link rel="stylesheet" href="components.css">
   <link rel="stylesheet" href="style.css">
@@ -16,38 +16,38 @@
     <div id="panel-slot" class="panel-slot"></div>
     <p id="account-line" class="account-line muted small" hidden></p>
     <div class="actions">
-      <button id="refresh" hidden>Обновить</button>
-      <button id="login" class="primary" hidden>Войти в Claude</button>
+      <button id="refresh" hidden data-i18n="set.refresh"></button>
+      <button id="login" class="primary" hidden data-i18n="login.btn"></button>
     </div>
 
     <section class="group" id="account">
-      <h2>Аккаунт</h2>
+      <h2 data-i18n="acc.title"></h2>
       <div class="box">
         <div class="item">
           <div class="text">
-            <span id="acc-name">Не вошли</span>
-            <small id="acc-hint">Каждый аккаунт — отдельная панель со своим входом.</small>
+            <span id="acc-name"></span>
+            <small id="acc-hint"></small>
           </div>
-          <button id="logout" hidden>Выйти</button>
+          <button id="logout" hidden data-i18n="acc.logout"></button>
         </div>
         <div class="item">
-          <div class="text">Ещё один аккаунт
-            <small>Откроется вторая панель — войдите в ней в другой аккаунт claude.ai.</small>
+          <div class="text"><span data-i18n="acc.add"></span>
+            <small data-i18n="acc.add_hint"></small>
           </div>
-          <button id="add-account">Добавить</button>
+          <button id="add-account" data-i18n="acc.add_btn"></button>
         </div>
         <div class="item col" id="remove-row" hidden>
           <div class="row-inline">
-            <div class="text">Убрать этот аккаунт из TokenCat
-              <small>Выход, удаление его настроек и автозапуска. Эта панель закроется.</small>
+            <div class="text"><span data-i18n="acc.remove"></span>
+              <small data-i18n="acc.remove_hint"></small>
             </div>
-            <button id="remove" class="danger">Убрать</button>
+            <button id="remove" class="danger" data-i18n="acc.remove_btn"></button>
           </div>
           <div id="remove-confirm" class="confirm small" hidden>
-            Точно убрать? Ключ входа будет удалён.
+            <span data-i18n="acc.remove_q"></span>
             <div class="actions left">
-              <button id="remove-yes" class="danger">Да, убрать</button>
-              <button id="remove-no">Отмена</button>
+              <button id="remove-yes" class="danger" data-i18n="acc.remove_yes"></button>
+              <button id="remove-no" data-i18n="common.cancel"></button>
             </div>
           </div>
         </div>
@@ -56,30 +56,30 @@
     </section>
 
     <section class="group">
-      <h2>Вид</h2>
+      <h2 data-i18n="set.view"></h2>
       <div class="box">
         <div class="item col">
           <div class="seg" id="views"></div>
         </div>
         <div class="item" id="menubar-row" hidden>
-          <div class="text">В строке меню
-            <small>Что показывать рядом с часами.</small>
+          <div class="text"><span data-i18n="set.menubar"></span>
+            <small data-i18n="set.menubar_hint"></small>
           </div>
           <select id="menubar-style"></select>
         </div>
         <div class="item" id="on-top-row">
-          <div class="text">Поверх всех окон</div>
+          <div class="text" data-i18n="set.on_top"></div>
           <label class="switch"><input id="on-top" type="checkbox"><i></i></label>
         </div>
         <div class="item">
-          <div class="text">Котик
-            <small>Спит без данных, тревожится при 80 % и выше.</small>
+          <div class="text"><span data-i18n="set.cat"></span>
+            <small data-i18n="set.cat_hint"></small>
           </div>
           <label class="switch"><input id="show-cat" type="checkbox"><i></i></label>
         </div>
         <div class="item" id="cat-fact-row">
-          <div class="text">Котофакт дня
-            <small>Раз в день котик рассказывает факт о котах. Клик по облачку — спрятать до завтра.</small>
+          <div class="text"><span data-i18n="set.fact"></span>
+            <small data-i18n="set.fact_hint"></small>
           </div>
           <label class="switch"><input id="cat-fact" type="checkbox"><i></i></label>
         </div>
@@ -87,24 +87,22 @@
     </section>
 
     <section class="group" id="early">
-      <h2>Ранний старт</h2>
+      <h2 data-i18n="early.title"></h2>
       <div class="box" id="early-box"></div>
-      <p class="muted small hint">5-часовое окно начинается с первого сообщения. Если его запустит
-        утренняя задача в Claude, лимит сбросится как раз посреди рабочего дня — можно выработать
-        его до сброса и получить свежий.</p>
+      <p class="muted small hint" data-i18n="early.hint"></p>
     </section>
 
     <section class="group">
-      <h2>Обновление и уведомления</h2>
+      <h2 data-i18n="set.updates"></h2>
       <div class="box">
         <div class="item">
-          <div class="text">Обновлять каждые</div>
+          <div class="text" data-i18n="set.interval"></div>
           <select id="interval"></select>
         </div>
         <div class="item">
-          <div class="text">Уведомления
-            <small>80 % и 100 % пятичасового лимита, и когда он сбросится.
-              <button id="notify-test" class="link">Проверить</button></small>
+          <div class="text"><span data-i18n="set.notify"></span>
+            <small><span data-i18n="set.notify_hint"></span>
+              <button id="notify-test" class="link" data-i18n="set.notify_test"></button></small>
           </div>
           <label class="switch"><input id="notify" type="checkbox"><i></i></label>
         </div>
@@ -112,15 +110,15 @@
     </section>
 
     <section class="group">
-      <h2>Система</h2>
+      <h2 data-i18n="set.system"></h2>
       <div class="box">
         <div class="item">
-          <div class="text">Запускать вместе с системой</div>
+          <div class="text" data-i18n="set.autostart"></div>
           <label class="switch"><input id="autostart" type="checkbox"><i></i></label>
         </div>
         <div class="item">
-          <div class="text">Язык
-            <small>Переводы появятся в одной из следующих версий.</small>
+          <div class="text"><span id="lang-en">Language · </span><span data-i18n="set.lang"></span>
+            <small data-i18n="set.lang_hint"></small>
           </div>
           <select id="language"></select>
         </div>
@@ -129,14 +127,13 @@
     </section>
 
     <section class="group">
-      <h2>Сеть</h2>
+      <h2 data-i18n="set.net"></h2>
       <div class="box">
         <div class="item col">
-          <div class="text">Прокси <small>Необязательно. Если claude.ai открывается только через VPN-прокси.</small></div>
+          <div class="text"><span data-i18n="set.proxy"></span> <small data-i18n="set.proxy_hint"></small></div>
           <div class="row-inline">
-            <input id="proxy" type="text" spellcheck="false" autocomplete="off"
-              placeholder="127.0.0.1:10808 или socks5://127.0.0.1:1080">
-            <button id="proxy-save">Применить</button>
+            <input id="proxy" type="text" spellcheck="false" autocomplete="off" data-i18n-ph="set.proxy_ph">
+            <button id="proxy-save" data-i18n="common.apply"></button>
           </div>
           <p id="net-msg" class="msg" hidden></p>
         </div>
@@ -145,37 +142,37 @@
 
     <section class="group">
       <details class="box" id="advanced">
-        <summary>Продвинутое</summary>
+        <summary data-i18n="set.advanced"></summary>
         <div class="item col">
-          <div class="text">Вставить ключ вручную
-            <small>Значение cookie <code>sessionKey</code> с claude.ai. Нужен, только если обычный
-              вход не работает.</small>
+          <div class="text"><span data-i18n="set.manual"></span>
+            <small data-i18n-html="set.manual_hint"></small>
           </div>
           <textarea id="manual" rows="2" spellcheck="false" autocomplete="off" placeholder="sk-ant-sid01-…"></textarea>
-          <div class="row-inline"><button id="manual-save">Сохранить ключ</button></div>
+          <div class="row-inline"><button id="manual-save" data-i18n="set.manual_save"></button></div>
           <p id="manual-msg" class="msg" hidden></p>
         </div>
         <div class="item">
-          <div class="text">Лог программы <small>Пригодится, если что-то пошло не так.</small></div>
-          <button id="open-log">Открыть</button>
+          <div class="text"><span data-i18n="set.log"></span> <small data-i18n="set.log_hint"></small></div>
+          <button id="open-log" data-i18n="common.open"></button>
         </div>
         <div class="item">
-          <div class="text">Первое знакомство <small>Показать окно приветствия ещё раз.</small></div>
-          <button id="onboarding">Пройти заново</button>
+          <div class="text"><span data-i18n="set.onb"></span> <small data-i18n="set.onb_hint"></small></div>
+          <button id="onboarding" data-i18n="set.onb_btn"></button>
         </div>
       </details>
     </section>
 
     <section class="about" id="support">
       <div class="actions">
-        <button id="donate" class="primary">Поддержать проект</button>
-        <button id="report">Сообщить о проблеме</button>
+        <button id="donate" class="primary" data-i18n="about.donate"></button>
+        <button id="report" data-i18n="about.report"></button>
       </div>
       <p id="about-msg" class="msg muted" hidden></p>
-      <p class="muted small">TokenCat <span id="version" class="version"></span> · трекер лимитов для Claude</p>
-      <p class="muted small">Неофициальная программа, не связана с Anthropic.</p>
+      <p class="muted small">TokenCat <span id="version" class="version"></span> · <span data-i18n="about.tagline"></span></p>
+      <p class="muted small" data-i18n="about.unofficial"></p>
     </section>
   </main>
+  <script src="i18n.js"></script>
   <script src="cat.js"></script>
   <script src="components.js"></script>
   <script src="early.js"></script>

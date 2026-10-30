@@ -25,6 +25,7 @@ mod shell;
 mod tray;
 mod usage;
 mod views;
+mod i18n;
 mod icons;
 mod taskbar;
 
@@ -63,10 +64,13 @@ fn main() {
             }
             let store = settings::SettingsStore::load(cfg_dir.join("settings.json"));
             let s = store.get();
+            // Язык — до окон, меню и первого сообщения планировщика
+            i18n::set(&s.language);
             applog::info(format!(
-                "TokenCat {} запущен; профиль {}; интервал {} с; прокси: {}",
+                "TokenCat {} запущен; профиль {}; язык {}; интервал {} с; прокси: {}",
                 env!("CARGO_PKG_VERSION"),
                 profile.id(),
+                i18n::lang(),
                 s.interval_secs,
                 settings::proxy_for_log(s.proxy.as_deref())
             ));
@@ -115,6 +119,7 @@ fn main() {
             auth::auth_login,
             auth::auth_logout,
             auth::auth_set_manual_key,
+            commands::i18n_get,
             commands::usage_snapshot,
             commands::usage_refresh,
             commands::settings_get,

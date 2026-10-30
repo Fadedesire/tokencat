@@ -3,8 +3,9 @@
 // Добавленный аккаунт (не основной профиль) проходит только вход и автозапуск.
 // «Готово» (или крестик окна) — онбординг пройден, больше не показывается;
 // повторить можно в настройках («Пройти заново»).
-(function () {
+TokenCat.i18n.ready.then(function () {
   "use strict";
+  const T = TokenCat.T;
   const { invoke } = window.__TAURI__.core;
   const { listen } = window.__TAURI__.event;
   const $ = (id) => document.getElementById(id);
@@ -40,7 +41,7 @@
     const name = steps[at];
     $("back").hidden = at === 0;
     $("skip").hidden = !(name === "login" && !auth.signed_in);
-    $("next").textContent = at === steps.length - 1 ? "Готово" : name === "hello" ? "Начать" : "Дальше";
+    $("next").textContent = T(at === steps.length - 1 ? "onb.finish" : name === "hello" ? "onb.start" : "onb.next");
     $("next").disabled = name === "login" && !auth.signed_in;
     if (name === "login") renderLogin();
   }
@@ -51,8 +52,26 @@
   }
 
   // ---------- 1. Привет ----------
+  // Названия языков — на самих языках, как в настройках
+  const LANG_NAMES = {
+    ru: "Русский", en: "English", es: "Español", "pt-BR": "Português (Brasil)", de: "Deutsch",
+    fr: "Français", ja: "日本語", ko: "한국어", "zh-Hans": "简体中文",
+  };
+
   function initHello() {
     $("os-name").textContent = st.os === "macos" ? "macOS" : "Windows";
+    // Язык (B3): по умолчанию — как в системе. Выбор сохраняем сразу; Rust пришлёт
+    // lang-changed, и окно перезагрузится уже на новом языке (на этом же шаге).
+    $("lang-en").hidden = TokenCat.i18n.lang === "en";
+    const sel = $("language");
+    for (const l of st.languages) {
+      const o = document.createElement("option");
+      o.value = l;
+      o.textContent = l === "system" ? T("lang.system") : LANG_NAMES[l] || l;
+      if (l === st.language) o.selected = true;
+      sel.appendChild(o);
+    }
+    sel.onchange = () => invoke("settings_set", { patch: { language: sel.value } }).catch(() => {});
     if (TokenCat.Cat) new TokenCat.Cat($("hello-cat"), { px: 5, mood: "idle" });
   }
 
@@ -76,7 +95,7 @@
     if (st.os === "macos") {
       const bar = document.createElement("div");
       bar.className = "menubar";
-      bar.textContent = "🐱 5ч 42% · Н 18%";
+      bar.textContent = `🐱 ${T("short.session")} 42% · ${T("short.weekly")} 18%`;
       p.appendChild(bar);
     } else {
       const bar = document.createElement("div");
@@ -91,7 +110,7 @@
         bar.appendChild(cv);
         new TokenCat.Cat(cv, { px: 1, mood: "idle" });
       }
-      for (const [label, pct] of [["5ч", 42], ["Н", 18]]) {
+      for (const [label, pct] of [[T("short.session"), 42], [T("short.weekly"), 18]]) {
         const row = document.createElement("span");
         const b = document.createElement("b");
         b.style.setProperty("--w", pct + "%");
@@ -106,10 +125,10 @@
 
   function initCards() {
     const second = st.os === "macos"
-      ? { id: "menubar", name: "В строке меню", desc: "Котик и проценты рядом с часами. Клик — подробная панель." }
-      : { id: "taskbar", name: "В панели задач", desc: "Две мини-полоски у трея. Клик — подробная панель." };
+      ? { id: "menubar", name: T("view.menubar"), desc: T("onb.card_menubar") }
+      : { id: "taskbar", name: T("view.taskbar"), desc: T("onb.card_taskbar") };
     const cards = [
-      { id: "overlay", name: "Поверх окон", desc: "Маленькая панель на рабочем столе. Можно двигать, всегда на виду.", preview: previewOverlay },
+      { id: "overlay", name: T("view.overlay"), desc: T("onb.card_overlay"), preview: previewOverlay },
       { ...second, preview: previewSecond },
     ];
     const box = $("cards");
@@ -127,7 +146,7 @@
       if (!ready) {
         const s = document.createElement("span");
         s.className = "soon";
-        s.textContent = "— скоро";
+        s.textContent = "— " + T("onb.soon");
         n.appendChild(s);
       }
       const d = document.createElement("div");
@@ -149,7 +168,7 @@
       $("login").hidden = true;
       msg.hidden = false;
       msg.className = "msg ok";
-      msg.textContent = st.account_name ? `Готово! Вы вошли как ${st.account_name}.` : "Готово! Вы вошли в claude.ai.";
+      msg.textContent = st.account_name ? T("onb.logged_as", { name: st.account_name }) : T("onb.logged");
     } else {
       $("login").hidden = false;
     }
@@ -159,7 +178,7 @@
     const msg = $("login-msg");
     msg.hidden = false;
     msg.className = "msg muted";
-    msg.textContent = "Войдите в открывшемся окне claude.ai…";
+    msg.textContent = T("login.wait");
     try { await invoke("auth_login"); }
     catch (e) { msg.className = "msg bad"; msg.textContent = String(e); }
   };
@@ -180,7 +199,7 @@
     if (p.kind === "cancelled") {
       msg.hidden = false;
       msg.className = "msg muted";
-      msg.textContent = "Окно входа закрыто. Можно попробовать ещё раз или пропустить.";
+      msg.textContent = T("onb.login_closed");
       return;
     }
     await loadAuth();
@@ -209,9 +228,9 @@
     box.innerHTML = "";
     box.classList.toggle("off", !on);
     const pts = [
-      { at: 0, time: E.hhmm(t.h, t.m), text: "задача шлёт запрос" },
-      { at: 60, time: E.hhmm(work, 0), text: "вы сели работать" },
-      { at: 100, time: E.hhmm(h, 0), text: "сброс — лимит снова 0 %" },
+      { at: 0, time: E.hhmm(t.h, t.m), text: T("onb.tl_task") },
+      { at: 60, time: E.hhmm(work, 0), text: T("onb.tl_work") },
+      { at: 100, time: E.hhmm(h, 0), text: T("onb.tl_reset") },
     ];
     const line = document.createElement("div");
     line.className = "tl-line";
@@ -252,6 +271,7 @@
 
   (async () => {
     try { st = await invoke("settings_get"); } catch (_) { return; }
+    document.title = "TokenCat — " + T("win.welcome");
     await loadAuth();
     view = st.view;
     // Автозапуск в онбординге всегда предлагаем включённым (решение Ромы 29.10)
@@ -265,10 +285,9 @@
     } else {
       // Второй аккаунт: ОС и вид уже выбраны в основном
       steps = ["login", "early", "autostart"];
-      $("login-title").textContent = "Новый аккаунт";
-      $("login-lead").textContent = "Войдите в другой аккаунт claude.ai — у этой панели будут свои лимиты. " +
-        "Окно входа откроется «с чистого листа», первый аккаунт не пострадает.";
+      $("login-title").textContent = T("onb.new_acc");
+      $("login-lead").textContent = T("onb.new_acc_lead");
     }
     renderSteps();
   })();
-})();
+});

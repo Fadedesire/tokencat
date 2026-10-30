@@ -1,6 +1,14 @@
-// Превью S06: все компоненты во всех состояниях на выдуманных данных.
-(function () {
+// Превью S06: все компоненты во всех состояниях на выдуманных данных. Инструмент разработки:
+// подписи превью по-русски, строки компонентов — из словаря. Словарь (B3) грузится из
+// ../locales/<lang>.json, поэтому превью открывать через локальный сервер из папки app
+// (например `npx serve app` → /ui/preview.html?lang=de); без сервера будут видны ключи.
+(async function () {
   "use strict";
+  const lang = new URLSearchParams(location.search).get("lang") || "ru";
+  try {
+    const r = await fetch("../locales/" + lang + ".json");
+    TokenCat.i18n.load(await r.json(), lang);
+  } catch (_) {}
   const { Panel } = TokenCat.ui;
   const $ = (id) => document.getElementById(id);
   const now = Date.now();

@@ -16,7 +16,7 @@ use tauri::{AppHandle, Manager};
 use crate::profile::{self, Profile};
 use crate::scheduler::Snapshot;
 use crate::settings::SettingsStore;
-use crate::{applog, shell};
+use crate::{applog, i18n, shell};
 
 pub const TRAY_ID: &str = "tokencat";
 /// Подсказка значка на Windows — не длиннее 127 символов
@@ -28,8 +28,8 @@ static LAST_TIP: Mutex<String> = Mutex::new(String::new());
 fn profile_label(k: &profile::Known) -> String {
     match (&k.account_name, k.profile.is_default()) {
         (Some(n), _) => n.clone(),
-        (None, true) => "Основной аккаунт".into(),
-        (None, false) => format!("Аккаунт {}", k.profile.id()),
+        (None, true) => i18n::t("menu.main_account"),
+        (None, false) => i18n::tf("menu.account", &[("id", &k.profile.id())]),
     }
 }
 
@@ -38,22 +38,22 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let s = app.state::<SettingsStore>().get();
     let me = app.state::<Profile>().inner().clone();
 
-    let refresh = MenuItem::with_id(app, "refresh", "Обновить", true, None::<&str>)?;
-    let settings = MenuItem::with_id(app, "settings", "Настройки…", true, None::<&str>)?;
+    let refresh = MenuItem::with_id(app, "refresh", i18n::t("menu.refresh"), true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, "settings", i18n::t("menu.settings"), true, None::<&str>)?;
     let popup = s.view != "overlay";
     // «Поверх окон» есть смысл менять только у плавающей панели
-    let top = CheckMenuItem::with_id(app, "on_top", "Поверх окон", !popup, s.always_on_top, None::<&str>)?;
+    let top = CheckMenuItem::with_id(app, "on_top", i18n::t("menu.on_top"), !popup, s.always_on_top, None::<&str>)?;
 
     // «Вид»: плавающая панель + вид своей ОС (B2)
     let v_overlay = CheckMenuItem::with_id(
-        app, "view_overlay", "Плавающая панель", true, s.view == "overlay", None::<&str>,
+        app, "view_overlay", i18n::t("menu.view_overlay"), true, s.view == "overlay", None::<&str>,
     )?;
     #[cfg(target_os = "macos")]
-    let (os_id, os_name) = ("view_menubar", "В строке меню");
+    let (os_id, os_name) = ("view_menubar", i18n::t("menu.view_menubar"));
     #[cfg(not(target_os = "macos"))]
-    let (os_id, os_name) = ("view_taskbar", "В панели задач");
+    let (os_id, os_name) = ("view_taskbar", i18n::t("menu.view_taskbar"));
     let v_os = CheckMenuItem::with_id(app, os_id, os_name, true, popup, None::<&str>)?;
-    let view = Submenu::with_items(app, "Вид", true, &[&v_overlay, &v_os])?;
+    let view = Submenu::with_items(app, i18n::t("menu.view"), true, &[&v_overlay, &v_os])?;
 
     // «Аккаунты»: все профили + «Добавить аккаунт»
     let known = shell::known_profiles(app);
@@ -69,19 +69,19 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         )?);
     }
     let can_add = known.len() < profile::MAX_PROFILES;
-    let add = MenuItem::with_id(app, "add_account", "Добавить аккаунт…", can_add, None::<&str>)?;
+    let add = MenuItem::with_id(app, "add_account", i18n::t("menu.add_account"), can_add, None::<&str>)?;
     let acc_sep = PredefinedMenuItem::separator(app)?;
-    let accounts = Submenu::with_id(app, "accounts", "Аккаунты", true)?;
+    let accounts = Submenu::with_id(app, "accounts", i18n::t("menu.accounts"), true)?;
     for i in &acc_items {
         accounts.append(i)?;
     }
     accounts.append(&acc_sep)?;
     accounts.append(&add)?;
 
-    let support = MenuItem::with_id(app, "support", "Поддержать проект", true, None::<&str>)?;
+    let support = MenuItem::with_id(app, "support", i18n::t("menu.support"), true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", i18n::t("menu.quit"), true, None::<&str>)?;
 
     Menu::with_items(
         app,
@@ -146,14 +146,14 @@ pub fn tooltip_text(snap: &Snapshot) -> String {
         Some(u) if snap.state != "signed_out" => {
             let mut parts = Vec::new();
             if let Some(l) = &u.session {
-                parts.push(format!("5 ч {}", pct(l)));
+                parts.push(format!("{} {}", i18n::t("lim.session"), pct(l)));
             }
             if let Some(l) = &u.weekly {
-                parts.push(format!("Неделя {}", pct(l)));
+                parts.push(format!("{} {}", i18n::t("lim.weekly"), pct(l)));
             }
             let mut t = parts.join(" · ");
             if snap.state != "ok" {
-                t.push_str(" (устарело)");
+                t.push_str(&format!(" ({})", i18n::t("tip.stale")));
             }
             t
         }

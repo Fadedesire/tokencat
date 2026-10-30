@@ -2,29 +2,25 @@
 // настройки (`settings-changed`), вход (`auth-changed`). Сам экран в сеть не ходит.
 // Секрет в JS не попадает: Rust отдаёт только маску ключа.
 // Всё применяется сразу: каждый переключатель отправляет одно поле в settings_set.
-(function () {
+TokenCat.i18n.ready.then(function () {
   "use strict";
+  const T = TokenCat.T;
   const { invoke } = window.__TAURI__.core;
   const { listen } = window.__TAURI__.event;
   const $ = (id) => document.getElementById(id);
   const show = (id, on) => { $(id).hidden = !on; };
+  // «Language ·» перед словом «Язык» — чтобы найти пункт, даже если язык выбран по ошибке
+  show("lang-en", TokenCat.i18n.lang !== "en");
 
+  // Названия языков — на самих языках (так их ищут в списке), кроме «Как в системе»
   const LANG_NAMES = {
-    system: "Как в системе", ru: "Русский", en: "English", es: "Español",
+    ru: "Русский", en: "English", es: "Español",
     "pt-BR": "Português (Brasil)", de: "Deutsch", fr: "Français", ja: "日本語",
     ko: "한국어", "zh-Hans": "简体中文",
   };
-  const VIEW_NAMES = {
-    overlay: "Плавающая панель",
-    taskbar: "В панели задач",
-    menubar: "В строке меню",
-  };
-  const MENUBAR_NAMES = {
-    both: "Котик, 5 ч и неделя",
-    session: "Котик и 5 ч",
-    icon: "Только котик",
-    ring: "Кольцо 5 ч",
-  };
+  const langName = (l) => (l === "system" ? T("lang.system") : LANG_NAMES[l] || l);
+  const VIEW_NAMES = { overlay: "view.overlay", taskbar: "view.taskbar", menubar: "view.menubar" };
+  const MENUBAR_NAMES = { both: "mb.both", session: "mb.session", icon: "mb.icon", ring: "mb.ring" };
 
   let snap = null;   // последний снимок от планировщика
   let auth = { signed_in: false };
@@ -54,9 +50,9 @@
   // ---------- Аккаунт и панель ----------
 
   function viewSnap() {
-    const s = snap || { state: "loading", message: "Загружаю данные…" };
+    const s = snap || { state: "loading", message: T("panel.loading") };
     if (auth.error) return { ...s, state: "error", message: auth.error, usage: null };
-    if (!auth.signed_in) return { state: "signed_out", message: "Вы не вошли в claude.ai" };
+    if (!auth.signed_in) return { state: "signed_out", message: T("panel.signed_out") };
     return s;
   }
 
@@ -74,10 +70,8 @@
     $("refresh").disabled = !!s.fetching;
     show("login", !auth.signed_in);
     show("logout", auth.signed_in);
-    $("acc-name").textContent = auth.signed_in ? name || "Вы вошли в claude.ai" : "Не вошли";
-    $("acc-hint").textContent = auth.signed_in
-      ? "Имя берём из профиля claude.ai. Почту не показываем."
-      : "Нажмите «Войти в Claude» — откроется окно claude.ai.";
+    $("acc-name").textContent = auth.signed_in ? name || T("acc.signed_in") : T("acc.signed_out");
+    $("acc-hint").textContent = auth.signed_in ? T("acc.hint_in") : T("acc.hint_out");
   }
 
   async function loadAuth() {
@@ -86,7 +80,7 @@
   }
 
   async function login() {
-    panel.flash("Войдите в открывшемся окне claude.ai…");
+    panel.flash(T("login.wait"));
     try { await invoke("auth_login"); } catch (e) { panel.flash(String(e), "warn"); }
   }
 
@@ -99,7 +93,7 @@
     $("add-account").disabled = true;
     try {
       await invoke("profile_add");
-      note("acc-msg", "Открываю вторую панель — войдите в ней в другой аккаунт.", "ok");
+      note("acc-msg", T("acc.adding"), "ok");
     } catch (e) {
       note("acc-msg", String(e), "bad");
     }
@@ -114,12 +108,8 @@
 
   // ---------- Настройки ----------
 
-  function intervalName(i) {
-    if (i < 60) return `${i} секунд`;
-    if (i === 60) return "минуту";
-    const m = i / 60;
-    return m >= 5 ? `${m} минут` : `${m} минуты`;
-  }
+  // «30 с», «1 мин», «2 мин» — без склонений, одинаково во всех языках
+  const intervalName = (i) => (i < 60 ? T("int.s", { n: i }) : T("int.m", { n: i / 60 }));
 
   function fillSelect(sel, items, current, label) {
     sel.innerHTML = "";
@@ -142,7 +132,7 @@
       b.type = "button";
       b.disabled = !st.views.includes(v);
       b.setAttribute("aria-pressed", String(st.view === v));
-      b.textContent = VIEW_NAMES[v];
+      b.textContent = T(VIEW_NAMES[v]);
       b.onclick = () => set({ view: v });
       box.appendChild(b);
     }
@@ -163,19 +153,19 @@
     const E = TokenCat.early;
     panel.setCat(v.show_cat);
     panel.setFact(E.showFact({ enabled: v.cat_fact, cat: v.show_cat, hiddenDay: v.fact_hidden_day })
-      ? E.factOfDay(TokenCat.catFacts) : null,
+      ? E.factOfDay(TokenCat.catFacts()) : null,
       () => set({ fact_hidden_day: E.dayKey() }));
     $("notify").checked = v.notify;
     $("autostart").checked = v.autostart;
     fillSelect($("interval"), v.intervals, v.interval_secs, intervalName);
-    fillSelect($("language"), v.languages, v.language, (l) => LANG_NAMES[l] || l);
-    fillSelect($("menubar-style"), v.menubar_styles || [], v.menubar_style, (m) => MENUBAR_NAMES[m] || m);
+    fillSelect($("language"), v.languages, v.language, langName);
+    fillSelect($("menubar-style"), v.menubar_styles || [], v.menubar_style, (m) => (MENUBAR_NAMES[m] ? T(MENUBAR_NAMES[m]) : m));
     // Поле прокси не трогаем, пока в нём пишут
     if (document.activeElement !== $("proxy")) $("proxy").value = v.proxy || "";
     show("remove-row", !v.profile_default);
     $("version").textContent = v.version;
-    document.title = v.profile_default ? "TokenCat — настройки"
-      : `TokenCat (${v.account_name || v.profile_id}) — настройки`;
+    document.title = v.profile_default ? "TokenCat — " + T("win.settings")
+      : `TokenCat (${v.account_name || v.profile_id}) — ${T("win.settings")}`;
     render();
   }
 
@@ -206,7 +196,7 @@
   // Прокси: проверяем и применяем по кнопке или Enter
   async function saveProxy() {
     if (await set({ proxy: $("proxy").value }, "net-msg")) {
-      note("net-msg", $("proxy").value.trim() ? "Прокси применён, проверяю связь…" : "Прокси выключен", "ok");
+      note("net-msg", $("proxy").value.trim() ? T("net.applied") : T("net.off"), "ok");
     }
   }
   $("proxy-save").onclick = saveProxy;
@@ -215,11 +205,11 @@
   // Ручной ключ. Вставка Ctrl+V/Shift+Insert/ПКМ — штатная, работает при любой раскладке:
   // браузерный движок смотрит на физическую клавишу, а не на букву.
   $("manual-save").onclick = async () => {
-    note("manual-msg", "Проверяю ключ…");
+    note("manual-msg", T("key.checking"));
     try {
       const masked = await invoke("auth_set_manual_key", { value: $("manual").value });
       $("manual").value = "";
-      note("manual-msg", "Сохранено: " + masked, "ok");
+      note("manual-msg", T("key.saved", { mask: masked }), "ok");
     } catch (e) {
       note("manual-msg", String(e), "bad");
     }
@@ -228,7 +218,7 @@
   $("onboarding").onclick = () => invoke("onboarding_open").catch(() => {});
 
   // Ссылки на донаты и обратную связь появятся в блоках B6–B7
-  const soon = () => note("about-msg", "Ссылки появятся к выходу первой версии. Спасибо!", "muted");
+  const soon = () => note("about-msg", T("about.soon"), "muted");
   $("donate").onclick = soon;
   $("report").onclick = soon;
 
@@ -273,4 +263,4 @@
     render();
     try { goTo(await invoke("settings_goto")); } catch (_) {}
   })();
-})();
+});

@@ -5,6 +5,7 @@
   "use strict";
   const TC = (window.TokenCat = window.TokenCat || {});
   const E = () => TC.early;
+  const T = (k, a) => TC.i18n.T(k, a);
 
   function el(tag, cls, text) {
     const e = document.createElement(tag);
@@ -23,7 +24,7 @@
       try { ok = document.execCommand("copy"); } catch (_) {}
     }
     const was = btn.textContent;
-    btn.textContent = ok ? "Скопировано" : "Нажмите Ctrl+C";
+    btn.textContent = ok ? T("copy.done") : T("copy.manual");
     setTimeout(() => { btn.textContent = was; }, 1600);
   }
 
@@ -34,7 +35,7 @@
     inp.type = "text";
     inp.readOnly = true;
     inp.value = text;
-    const b = el("button", null, "Копировать");
+    const b = el("button", null, T("copy.btn"));
     b.type = "button";
     b.onclick = () => copy(inp.value, inp, b);
     row.append(inp, b);
@@ -55,8 +56,8 @@
 
       // Переключатель
       const sw = el("div", "item");
-      const swText = el("div", "text", "Ранний старт 5-часового окна");
-      swText.appendChild(el("small", null, "Лимит обновится посреди рабочего дня, а не к вечеру."));
+      const swText = el("div", "text", T("early.switch"));
+      swText.appendChild(el("small", null, T("early.switch_hint")));
       const lab = el("label", "switch");
       this.on = el("input");
       this.on.type = "checkbox";
@@ -66,7 +67,7 @@
 
       // Час сброса
       const hr = (this.hourRow = el("div", "item"));
-      const hrText = el("div", "text", "Хочу сброс в");
+      const hrText = el("div", "text", T("early.want"));
       this.taskLine = el("small");
       hrText.appendChild(this.taskLine);
       this.hour = el("select");
@@ -84,11 +85,11 @@
 
       // Инструкция
       const g = (this.guideRow = el("div", "item col"));
-      this.guideBtn = el("button", "primary", "Настроить задачу в Claude");
+      this.guideBtn = el("button", "primary", T("early.guide_btn"));
       this.guideBtn.type = "button";
       this.guideBtn.onclick = () => {
         this.guide.hidden = !this.guide.hidden;
-        this.guideBtn.textContent = this.guide.hidden ? "Настроить задачу в Claude" : "Скрыть инструкцию";
+        this.guideBtn.textContent = this.guide.hidden ? T("early.guide_btn") : T("early.guide_hide");
       };
       const btnRow = el("div", "row-inline");
       btnRow.appendChild(this.guideBtn);
@@ -104,18 +105,16 @@
       const box = el("div", "guide");
       const ol = el("ol");
       const li = (html) => { const x = el("li"); x.innerHTML = html; ol.appendChild(x); return x; };
-      li("Откройте Claude (приложение или claude.ai) и слева выберите <b>«Запланированные»</b> " +
-         "(Scheduled) → <b>«Новая задача»</b> → <b>«Настроить вручную»</b>.");
-      li("Название — <b>Котофакт</b>. В поле запроса вставьте:").appendChild(copyRow(E().PROMPT).row);
+      // Шаги — разметка из словаря (жирные названия кнопок Claude), не из ввода пользователя
+      li(T("early.g1"));
+      li(T("early.g2", { name: T("early.task_name") })).appendChild(copyRow(E().prompt()).row);
       this.timeStep = li("");
-      li("Модель — самую лёгкую из списка (например Haiku), если можно выбрать. Нажмите <b>«Сохранить»</b>.");
+      li(T("early.g4"));
       box.appendChild(ol);
-      const alt = el("p", "small muted", "Или просто отправьте это сообщение Claude в новом чате — он сам создаст задачу:");
+      const alt = el("p", "small muted", T("early.alt"));
       this.altCopy = copyRow("");
       box.append(alt, this.altCopy.row);
-      box.appendChild(el("p", "small muted",
-        "Задача выполняется на стороне Claude. Запрос крошечный — лимит почти не тратит. " +
-        "TokenCat ничего не отправляет сам: он только покажет, сработал ли ранний старт."));
+      box.appendChild(el("p", "small muted", T("early.note")));
       return box;
     }
 
@@ -147,13 +146,10 @@
       this.hour.value = String(h);
       this.hourRow.hidden = !on;
       this.guideRow.hidden = !on;
-      const prev = e.taskTime(h).prevDay ? " накануне" : "";
-      this.taskLine.textContent = `Задача отправит короткий запрос в ${task}${prev}. Ставьте сброс на 2–3 часа позже начала работы.`;
-      this.timeStep.innerHTML = `Как часто — <b>каждый день</b>, время — <b>${task}</b>` +
-        (prev ? " (вечером накануне)" : "") + ". Если минуты выбрать нельзя — ставьте ровно " +
-        `<b>${e.hhmm(e.taskTime(h).h, 0)}</b>.`;
-      this.altCopy.set(`Создай запланированную задачу «Котофакт»: каждый день в ${task} по моему местному времени ` +
-        `отправляй запрос «${e.PROMPT}» Используй самую лёгкую модель.`);
+      const prev = e.taskTime(h).prevDay;
+      this.taskLine.textContent = T(prev ? "early.task_line_prev" : "early.task_line", { task });
+      this.timeStep.innerHTML = T(prev ? "early.g3_prev" : "early.g3", { task, hour: e.hhmm(e.taskTime(h).h, 0) });
+      this.altCopy.set(T("early.alt_msg", { name: T("early.task_name"), task, prompt: e.prompt() }));
       if (this.opts.status) {
         const s = e.status({ enabled: on, resetHour: h, session: this.session, haveData: this.haveData });
         this.statusRow.hidden = !on || !s.text;

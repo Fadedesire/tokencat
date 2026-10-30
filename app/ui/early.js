@@ -9,6 +9,9 @@
 // сработала ли задача сегодня.
 (function (root) {
   "use strict";
+  // Тексты — из словаря языка (B3); в Node-тестах i18n.js подключаем сами
+  const I = typeof module !== "undefined" && module.exports ? require("./i18n.js") : root.TokenCat.i18n;
+  const T = (k, a) => I.T(k, a);
 
   const HOUR = 3600e3, MIN = 60e3;
   const WINDOW_H = 5;          // длина окна подписки, часы
@@ -94,22 +97,22 @@
     const want = hhmm(resetHour, 0);
     const cyc = currentCycle(resetHour, now);
     if (!cyc) {
-      return { kind: "wait", text: `Задача запустит окно в ${clock(nextTask(resetHour, now))} — сброс будет в ${want}.` };
+      return { kind: "wait", text: T("early.st.wait", { task: clock(nextTask(resetHour, now)), reset: want }) };
     }
     if (!haveData || !session) {
-      return { kind: "unknown", text: `Сброс ждём в ${want}. Проверю, когда появятся данные о лимитах.` };
+      return { kind: "unknown", text: T("early.st.nodata", { reset: want }) };
     }
     const r = session.resets_at ? Date.parse(session.resets_at) : NaN;
     if (!isNaN(r) && r >= cyc.reset && r < cyc.reset + HOUR) {
-      return { kind: "ok", text: `Сработало: 5-часовой лимит сбросится в ${clock(r)}.` };
+      return { kind: "ok", text: T("early.st.ok", { reset: clock(r) }) };
     }
     if (isNaN(r)) {
       // Окно не начато, хотя задача уже должна была его запустить (дадим ей 15 минут)
-      if (now - cyc.task < 15 * MIN) return { kind: "wait", text: `Задача запускается (${clock(cyc.task)})…` };
-      return { kind: "miss", text: `Окно не началось: похоже, задача в Claude в ${clock(cyc.task)} не сработала. Проверьте её в разделе «Запланированные».` };
+      if (now - cyc.task < 15 * MIN) return { kind: "wait", text: T("early.st.starting", { task: clock(cyc.task) }) };
+      return { kind: "miss", text: T("early.st.miss", { task: clock(cyc.task) }) };
     }
-    if (r <= now) return { kind: "unknown", text: `Сброс ждём в ${want}.` };
-    return { kind: "other", text: `Сейчас сброс в ${clock(r)}, а не в ${want}: окно началось раньше задачи (или задача не сработала).` };
+    if (r <= now) return { kind: "unknown", text: T("early.st.waiting", { reset: want }) };
+    return { kind: "other", text: T("early.st.other", { reset: clock(r), want }) };
   }
 
   /** Номер дня от 1970 по местному календарю — для выбора факта. */
@@ -130,10 +133,10 @@
     return !!enabled && !!cat && hiddenDay !== dayKey(now);
   }
 
-  /** Текст задачи для Claude: короткий запрос, крошечный ответ. */
-  const PROMPT = "Расскажи один короткий интересный факт про котов — одним предложением.";
+  /** Текст задачи для Claude: короткий запрос, крошечный ответ (на языке интерфейса). */
+  const prompt = () => T("early.prompt");
 
-  const api = { taskTime, taskLabel, currentCycle, nextTask, status, dayKey, dayNumber, factOfDay, showFact, PROMPT, hhmm };
+  const api = { taskTime, taskLabel, currentCycle, nextTask, status, dayKey, dayNumber, factOfDay, showFact, prompt, hhmm };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else (root.TokenCat = root.TokenCat || {}).early = api;
 })(typeof window !== "undefined" ? window : globalThis);

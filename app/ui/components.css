@@ -69,6 +69,11 @@
   padding: 0 var(--tc-pad);
 }
 .tc-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Языки (B3): у японского, корейского и китайского иероглифы вдвое шире латиницы —
+   «3時間05分» не влезает в 52 px. Подпись у них короче («週»), отдаём место времени. */
+html:lang(ja) .tc-row, html:lang(ko) .tc-row, html:lang(zh-Hans) .tc-row {
+  grid-template-columns: 40px 1fr 34px 70px;
+}
 .tc-bar {
   display: block;
   height: var(--tc-bar-h);

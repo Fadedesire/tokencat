@@ -187,7 +187,7 @@ pub async fn auth_login(window: WebviewWindow, app: AppHandle) -> CmdResult<()> 
     }
     let url = Url::parse(&format!("{}/login", api::BASE)).map_err(err)?;
     let b = WebviewWindowBuilder::new(&app, LOGIN_LABEL, WebviewUrl::External(url))
-        .title("Вход в claude.ai — TokenCat")
+        .title(crate::i18n::t("win.login"))
         .inner_size(480.0, 760.0)
         .center()
         // Только https: никаких file:, javascript: и прочего
@@ -295,7 +295,7 @@ async fn watch_login(app: &AppHandle) {
         };
         if started.elapsed() > LOGIN_TIMEOUT {
             let _ = w.destroy();
-            notify(app, "cancelled", Some("Время на вход истекло, попробуйте ещё раз".into()));
+            notify(app, "cancelled", Some(crate::i18n::t("auth.timeout")));
             return;
         }
         let Ok((Some(raw), org_hint)) = read_cookies(w.clone()).await else {
@@ -389,9 +389,9 @@ pub async fn auth_set_manual_key(
             Ok(masked)
         }
         Err(f) if f.verdict == Verdict::SessionExpired => {
-            Err("claude.ai не принял этот ключ. Возможно, он устарел — скопируйте заново.".into())
+            Err(crate::i18n::t("auth.key_rejected"))
         }
-        Err(f) => Err(format!("{}. Ключ не сохранён.", f.verdict.user_message())),
+        Err(f) => Err(crate::i18n::tf("auth.key_not_saved", &[("msg", &f.verdict.user_message())])),
     }
 }
 

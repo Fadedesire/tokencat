@@ -7,8 +7,9 @@
 // В шапке — имя аккаунта claude.ai (B1), котик выключается в настройках.
 // Виды B2 («В панели задач» / «В строке меню»): это же окно — всплывающая панель у виджета.
 //   Её не таскают; прячется сама, когда щёлкнули мимо (Rust), или по Esc.
-(function () {
+TokenCat.i18n.ready.then(function () {
   "use strict";
+  const T = TokenCat.T;
   const { invoke } = window.__TAURI__.core;
   const { listen } = window.__TAURI__.event;
   const win = window.__TAURI__.window.getCurrentWindow();
@@ -20,7 +21,7 @@
   const panel = new TokenCat.ui.Panel({
     onAction: (id) => {
       if (id === "login") {
-        panel.flash("Войдите в открывшемся окне claude.ai…");
+        panel.flash(T("login.wait"));
         invoke("auth_login").catch((e) => panel.flash(String(e), "warn"));
       } else if (id === "log") {
         invoke("open_log").catch((e) => panel.flash(String(e), "warn"));
@@ -32,9 +33,9 @@
 
   // Снимок планировщика + состояние входа → что показать (как в окне настроек)
   function viewSnap() {
-    const s = snap || { state: "loading", message: "Загружаю данные…" };
+    const s = snap || { state: "loading", message: T("panel.loading") };
     if (auth.error) return { ...s, state: "error", message: auth.error, usage: null };
-    if (!auth.signed_in) return { state: "signed_out", message: "Вы не вошли в claude.ai" };
+    if (!auth.signed_in) return { state: "signed_out", message: T("panel.signed_out") };
     return s;
   }
   const render = () => {
@@ -64,7 +65,7 @@
       enabled: st.cat_fact, cat: st.show_cat !== false, hiddenDay: st.fact_hidden_day,
     });
     if (!show) { panel.setFact(null); fit(); return; }
-    panel.setFact(early.factOfDay(TokenCat.catFacts), () => {
+    panel.setFact(early.factOfDay(TokenCat.catFacts()), () => {
       fit();
       invoke("settings_set", { patch: { fact_hidden_day: early.dayKey() } }).catch(() => {});
     });
@@ -184,4 +185,4 @@
     try { snap = await invoke("usage_snapshot"); } catch (_) {}
     render();
   })();
-})();
+});

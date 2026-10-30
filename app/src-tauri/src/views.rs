@@ -18,6 +18,7 @@ use crate::auth::MAIN_LABEL;
 use crate::icons::{self, Mood};
 use crate::overlay::{self, Rect};
 use crate::scheduler::{Scheduler, Snapshot};
+use crate::i18n::t;
 use crate::settings::SettingsStore;
 use crate::{applog, shell, tray};
 
@@ -74,7 +75,7 @@ pub fn summary(snap: &Snapshot) -> Summary {
     }
 }
 
-/// Текст в строке меню macOS. Пока по-русски, как и весь интерфейс (языки — B3).
+/// Текст в строке меню macOS: короткие подписи «5ч» / «Н» из словаря языка.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn menubar_title(style: &str, s: &Summary) -> Option<String> {
     let pct = |v: Option<f64>| match v {
@@ -82,10 +83,13 @@ pub fn menubar_title(style: &str, s: &Summary) -> Option<String> {
         None => "—".into(),
     };
     match style {
-        "session" => Some(format!("5ч {}", pct(s.session))),
+        "session" => Some(format!("{} {}", t("short.session"), pct(s.session))),
         "both" => Some(match (s.session, s.weekly) {
-            (_, None) => format!("5ч {}", pct(s.session)),
-            _ => format!("5ч {} · Н {}", pct(s.session), pct(s.weekly)),
+            (_, None) => format!("{} {}", t("short.session"), pct(s.session)),
+            _ => format!(
+                "{} {} · {} {}",
+                t("short.session"), pct(s.session), t("short.weekly"), pct(s.weekly)
+            ),
         }),
         _ => None, // icon, ring — только значок
     }

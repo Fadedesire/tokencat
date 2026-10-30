@@ -1442,7 +1442,7 @@ mod win {
 
         // «Шлепок» (B10): полоски заполняются волной
         let wave_t = L.with(|l| l.splat.get()).map(|s| s.elapsed().as_secs_f64() * 1000.0 / SPLAT_MS);
-        let rows = [("5ч", d.session), ("Н", d.weekly)];
+        let rows = [(crate::i18n::t("short.session"), d.session), (crate::i18n::t("short.weekly"), d.weekly)];
         for (i, (label, val)) in rows.iter().enumerate() {
             let wave = wave_t.map_or(1.0, |t| fill_wave(t, i));
             let cy = lay.row_y[i];

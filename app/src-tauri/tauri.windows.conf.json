@@ -1,11 +1,26 @@
 {
   "bundle": {
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "windows": {
-      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["Russian", "English"],
+        "languages": [
+          "English",
+          "Russian",
+          "Spanish",
+          "PortugueseBR",
+          "German",
+          "French",
+          "Japanese",
+          "Korean",
+          "SimpChinese"
+        ],
         "displayLanguageSelector": false
       }
     }

@@ -15,7 +15,7 @@ use tauri::{AppHandle, Manager};
 use crate::profile::Profile;
 use crate::settings::SettingsStore;
 use crate::usage::Usage;
-use crate::applog;
+use crate::{applog, i18n};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Alert {
@@ -45,12 +45,13 @@ pub fn step(level: u8, percent: f64) -> (u8, Option<Alert>) {
 
 fn texts(a: Alert, account: Option<&str>) -> (String, String) {
     let who = account.map(|n| format!(" · {n}")).unwrap_or_default();
-    let (title, body) = match a {
-        Alert::Reached80 => ("5-часовой лимит: 80 %", "Осталось около пятой части. Самое время сохранить работу."),
-        Alert::Reached100 => ("5-часовой лимит исчерпан", "Новые сообщения будут доступны после сброса окна."),
-        Alert::Reset => ("5-часовой лимит сброшен", "Можно работать дальше."),
+    let k = match a {
+        Alert::Reached80 => "alert.80",
+        Alert::Reached100 => "alert.100",
+        Alert::Reset => "alert.reset",
     };
-    (format!("TokenCat{who}: {title}"), body.to_string())
+    let title = i18n::t(&format!("{k}.title"));
+    (format!("TokenCat{who}: {title}"), i18n::t(&format!("{k}.body")))
 }
 
 /// Вызывается планировщиком после каждого удачного обновления.
@@ -77,7 +78,7 @@ pub fn on_usage(app: &AppHandle, usage: &Usage) {
 pub fn test(app: &AppHandle) {
     let name = app.state::<SettingsStore>().get().account_name;
     let who = name.map(|n| format!(" · {n}")).unwrap_or_default();
-    show(app, format!("TokenCat{who}"), "Так будут выглядеть уведомления о лимитах.".into());
+    show(app, format!("TokenCat{who}"), i18n::t("alert.test"));
 }
 
 #[cfg(any(windows, target_os = "macos"))]

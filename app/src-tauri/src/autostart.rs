@@ -36,5 +36,5 @@ pub fn is_enabled(p: &Profile) -> bool {
 pub fn set(p: &Profile, on: bool) -> Result<(), String> {
     let a = entry(p)?;
     let r = if on { a.enable() } else { a.disable() };
-    r.map_err(|e| format!("Не удалось {} автозапуск: {e}", if on { "включить" } else { "выключить" }))
+    r.map_err(|e| crate::i18n::tf(if on { "err.autostart_on" } else { "err.autostart_off" }, &[("e", &e)]))
 }

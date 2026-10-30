@@ -165,7 +165,7 @@ pub fn is_uuid_like(s: &str) -> bool {
 }
 
 /// Проверка и приведение адреса прокси. Пустая строка — прокси выключен (Ok(None)).
-/// `127.0.0.1:10808` без схемы считаем http://.
+/// `127.0.0.1:10808` без схемы считаем http://. Ошибка — ключ строки (i18n::t).
 pub fn normalize_proxy(raw: &str) -> Result<Option<String>, &'static str> {
     let s = raw.trim().trim_end_matches('/');
     if s.is_empty() {
@@ -176,20 +176,20 @@ pub fn normalize_proxy(raw: &str) -> Result<Option<String>, &'static str> {
         None => ("http".to_string(), s),
     };
     if !matches!(scheme.as_str(), "http" | "https" | "socks5" | "socks5h") {
-        return Err("Прокси: поддерживаются адреса http://, https://, socks5:// и socks5h://");
+        return Err("err.proxy_scheme");
     }
     if rest.contains('@') {
         // Пароль от прокси пришлось бы хранить в файле — пока не поддерживаем
-        return Err("Прокси с логином и паролем пока не поддерживается");
+        return Err("err.proxy_auth");
     }
     if rest.contains(|c: char| c.is_whitespace() || c == '/' || c == '?' || c == '#') {
-        return Err("Прокси: укажите только адрес и порт, например 127.0.0.1:10808");
+        return Err("err.proxy_path");
     }
     let Some((host, port)) = rest.rsplit_once(':') else {
-        return Err("Прокси: не указан порт, например 127.0.0.1:10808");
+        return Err("err.proxy_port");
     };
     if host.is_empty() || port.parse::<u16>().map_or(true, |p| p == 0) {
-        return Err("Прокси: неверный адрес или порт");
+        return Err("err.proxy_bad");
     }
     Ok(Some(format!("{scheme}://{host}:{port}")))
 }
@@ -241,12 +241,12 @@ fn read_file(path: &Path) -> Option<Settings> {
 /// Запись через временный файл, чтобы при сбое не остался обрезанный settings.json.
 fn write_file(path: &Path, s: &Settings) -> Result<(), String> {
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| format!("Не удалось создать папку настроек: {e}"))?;
+        std::fs::create_dir_all(dir).map_err(|e| crate::i18n::tf("err.settings_dir", &[("e", &e)]))?;
     }
     let tmp = path.with_extension("json.tmp");
     let text = serde_json::to_string_pretty(s).map_err(|e| e.to_string())?;
-    std::fs::write(&tmp, text).map_err(|e| format!("Не удалось сохранить настройки: {e}"))?;
-    std::fs::rename(&tmp, path).map_err(|e| format!("Не удалось сохранить настройки: {e}"))
+    std::fs::write(&tmp, text).map_err(|e| crate::i18n::tf("err.settings_save", &[("e", &e)]))?;
+    std::fs::rename(&tmp, path).map_err(|e| crate::i18n::tf("err.settings_save", &[("e", &e)]))
 }
 
 #[cfg(test)]

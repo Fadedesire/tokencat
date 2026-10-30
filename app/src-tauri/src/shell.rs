@@ -31,10 +31,21 @@ pub fn settings_changed(app: &AppHandle) {
     crate::views::refresh(app);
 }
 
+/// Сменился язык (B3): окна перезагрузят словарь, заголовки окон — заново.
+pub fn language_changed(app: &AppHandle) {
+    emit_ui(app, "lang-changed", crate::i18n::lang());
+    if let Some(w) = app.get_webview_window(SETTINGS_LABEL) {
+        let _ = w.set_title(&window_title(app, &crate::i18n::t("win.settings")));
+    }
+    if let Some(w) = app.get_webview_window(ONBOARDING_LABEL) {
+        let _ = w.set_title(&window_title(app, &crate::i18n::t("win.welcome")));
+    }
+}
+
 /// Сменить вид (меню «Вид», настройки, онбординг).
 pub fn set_view(app: &AppHandle, v: &str) -> Result<(), String> {
     if !crate::settings::VIEWS.contains(&v) {
-        return Err("Этот вид недоступен на этой системе".into());
+        return Err(crate::i18n::t("err.view"));
     }
     let store = app.state::<SettingsStore>();
     if store.get().view == v {
@@ -113,7 +124,7 @@ pub fn open_settings(app: &AppHandle, section: Option<&str>) {
     }
     *GOTO.lock().unwrap() = section.map(String::from);
     let r = WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("settings.html".into()))
-        .title(window_title(app, "настройки"))
+        .title(window_title(app, &crate::i18n::t("win.settings")))
         .inner_size(440.0, 640.0)
         .min_inner_size(400.0, 420.0)
         .resizable(true)
@@ -132,7 +143,7 @@ pub fn open_onboarding(app: &AppHandle) {
         return;
     }
     let r = WebviewWindowBuilder::new(app, ONBOARDING_LABEL, WebviewUrl::App("onboarding.html".into()))
-        .title(window_title(app, "добро пожаловать"))
+        .title(window_title(app, &crate::i18n::t("win.welcome")))
         .inner_size(560.0, 580.0)
         .resizable(false)
         .maximizable(false)
@@ -208,13 +219,13 @@ pub fn add_account(app: &AppHandle) -> Result<(), String> {
         return profile::launch(&k.profile);
     }
     let p = profile::next_free(&known)
-        .ok_or_else(|| format!("Можно добавить не больше {} аккаунтов", profile::MAX_PROFILES))?;
+        .ok_or_else(|| crate::i18n::tf("err.max_profiles", &[("n", &profile::MAX_PROFILES)]))?;
     let dir = p.config_dir(&app.state::<AppDirs>().config_base);
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Не удалось создать профиль: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| crate::i18n::tf("err.profile_create", &[("e", &e)]))?;
     // Пустой settings.json — чтобы профиль сразу появился в меню «Аккаунты»
     let file = dir.join("settings.json");
     if !file.exists() {
-        std::fs::write(&file, "{}").map_err(|e| format!("Не удалось создать профиль: {e}"))?;
+        std::fs::write(&file, "{}").map_err(|e| crate::i18n::tf("err.profile_create", &[("e", &e)]))?;
     }
     applog::info(format!("новый профиль {}", p.id()));
     profile::launch(&p)?;
@@ -240,14 +251,14 @@ fn open_profile(app: &AppHandle, id: &str) {
 pub fn remove_profile(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
     let p = app.state::<Profile>().inner().clone();
     if p.is_default() {
-        return Err("Основной аккаунт удалить нельзя — можно только выйти".into());
+        return Err(crate::i18n::t("err.profile_main"));
     }
     crate::auth::sign_out(app, window)?;
     if let Err(e) = autostart::set(&p, false) {
         applog::warn(e);
     }
     let dir = p.config_dir(&app.state::<AppDirs>().config_base);
-    std::fs::remove_dir_all(&dir).map_err(|e| format!("Не удалось удалить профиль: {e}"))?;
+    std::fs::remove_dir_all(&dir).map_err(|e| crate::i18n::tf("err.profile_remove", &[("e", &e)]))?;
     applog::info(format!("профиль {} удалён", p.id()));
     app.exit(0);
     Ok(())
