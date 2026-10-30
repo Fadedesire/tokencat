@@ -1,0 +1,139 @@
+# Релиз TokenCat (B4): тег v* → сборки Windows и macOS → ЧЕРНОВИК GitHub Release.
+# Как выпустить версию — docs/RELEASE.md. Коротко: поднять версию (Claude правит tauri.conf.json, Cargo.toml, package.json),
+# записать «что нового» в ci/release-notes.md, git-sync, потом tools\release.bat (ставит тег).
+# Черновик проверяем и публикуем руками (Publish release) — только тогда его увидит
+# автообновление: оно читает latest.json последнего ОПУБЛИКОВАННОГО релиза.
+#
+# Секреты (Settings → Secrets and variables → Actions):
+#   TAURI_SIGNING_PRIVATE_KEY — приватный ключ подписи обновлений (tools\copy-updater-key.bat)
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  # Один черновик на тег: создаём заранее, чтобы сборки Windows и macOS не создали два.
+  draft:
+    runs-on: ubuntu-latest
+    outputs:
+      id: ${{ steps.create.outputs.id }}
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version matches tag
+        id: ver
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          conf=$(jq -r .version app/src-tauri/tauri.conf.json)
+          cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' app/src-tauri/Cargo.toml | head -1)
+          echo "tag=$tag tauri.conf=$conf Cargo.toml=$cargo"
+          if [ "$tag" != "$conf" ] || [ "$tag" != "$cargo" ]; then
+            echo "::error::Версия в теге ($tag) не совпадает с tauri.conf.json ($conf) / Cargo.toml ($cargo). Поднимите версию во всех трёх файлах."
+            exit 1
+          fi
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Signing key present
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::Нет секрета TAURI_SIGNING_PRIVATE_KEY (tools\\copy-updater-key.bat → GitHub → Secrets)."
+            exit 1
+          fi
+
+      - name: Create draft release
+        id: create
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+              --title "TokenCat $GITHUB_REF_NAME" --notes-file ci/release-notes.md
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name==\"$GITHUB_REF_NAME\") | .id" | head -1)
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: draft
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+            args: ""
+          - os: macos-latest
+            name: macos-universal
+            args: "--target universal-apple-darwin"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.name == 'macos-universal' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> target
+
+      - name: Unit tests
+        working-directory: app/src-tauri
+        run: cargo test --color never
+
+      - name: Install Tauri CLI
+        working-directory: app
+        run: npm install --no-audit --no-fund
+
+      # Установщик/dmg + подписанные файлы обновлений + latest.json → в черновик
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          projectPath: app
+          releaseId: ${{ needs.draft.outputs.id }}
+          includeUpdaterJson: true
+          args: ${{ matrix.args }} --config src-tauri/tauri.release.conf.json
+
+      # Portable: тот же exe в zip — для тех, кто не хочет установщик
+      - name: Portable zip (Windows)
+        if: matrix.name == 'windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = "${{ needs.draft.outputs.version }}"
+          New-Item -ItemType Directory -Force portable | Out-Null
+          Copy-Item app/src-tauri/target/release/tokencat.exe portable/TokenCat.exe
+          $zip = "TokenCat_${v}_x64-portable.zip"
+          Compress-Archive -Path portable/TokenCat.exe -DestinationPath $zip -Force
+          gh release upload "${{ github.ref_name }}" $zip --clobber
+
+      # Контрольные суммы — для winget/Homebrew и для тех, кто проверяет файлы
+      - name: Checksums
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p sums
+          if [ "${{ matrix.name }}" = "windows" ]; then
+            files=$(ls app/src-tauri/target/release/bundle/nsis/*-setup.exe TokenCat_*_x64-portable.zip)
+          else
+            files=$(ls app/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          fi
+          for f in $files; do
+            (cd "$(dirname "$f")" && shasum -a 256 "$(basename "$f")") >> "sums/SHA256SUMS-${{ matrix.name }}.txt"
+          done
+          cat sums/*.txt
+          gh release upload "${{ github.ref_name }}" sums/*.txt --clobber

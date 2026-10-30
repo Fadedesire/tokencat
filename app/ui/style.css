@@ -176,3 +176,8 @@ details.box[open] > summary { border-bottom: 1px solid var(--tc-border); }
 .check { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 10px; background: var(--tc-bg); border: 1px solid var(--tc-border); }
 .onb .lang-row { margin-bottom: 8px; }   /* язык (B3) над строкой «Ваша система» */
 .actions.left { justify-content: flex-start; }
+
+/* Обновления (B4) */
+.pre { white-space: pre-line; }
+.grow { flex: 1; min-width: 0; }
+#upd-progress { width: 100%; height: 6px; accent-color: var(--accent, currentColor); }

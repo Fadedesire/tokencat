@@ -6,6 +6,7 @@
 //     уведомления, окно настроек, онбординг.
 // B2: виды ОС — панель задач Windows (taskbar.rs) и строка меню macOS (views.rs).
 // B3: языки (i18n.rs), кеш цифр (cache.rs), проверка WebView2 (webview_check.rs).
+// B4: автообновление из GitHub Releases (updater.rs).
 
 // На Windows не показываем консольное окно ни в релизе, ни в dev-сборке (лог — в файле,
 // «Открыть лог» в настройках). В тестах консоль нужна, чтобы видеть результат.
@@ -31,6 +32,7 @@ mod webview_check;
 mod i18n;
 mod icons;
 mod taskbar;
+mod updater;
 
 use tauri::Manager;
 
@@ -47,6 +49,7 @@ fn main() {
     let keyring_account = profile.keyring_account();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(profile.clone())
         .manage(auth::Auth::new(Box::new(auth::store::KeyringStore::new(keyring_account))))
         .manage(scheduler::Scheduler::new())
@@ -97,6 +100,7 @@ fn main() {
             overlay::setup(&handle);
             tray::setup(&handle);
             views::init(&handle);
+            updater::init(&handle);
             if let Some(l) = listener {
                 let h = handle.clone();
                 instance::listen(l, profile.id().to_string(), move || shell::on_second_instance(&h));
@@ -144,6 +148,9 @@ fn main() {
             commands::profile_remove,
             commands::open_log,
             commands::webview_low_memory,
+            commands::update_status,
+            commands::update_check,
+            commands::update_install,
             overlay::overlay_fit,
             views::panel_painted,
             overlay::overlay_menu

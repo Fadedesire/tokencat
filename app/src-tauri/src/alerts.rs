@@ -74,6 +74,11 @@ pub fn on_usage(app: &AppHandle, usage: &Usage) {
     show(app, title, body);
 }
 
+/// Уведомление не о лимитах (B4: «вышла новая версия»).
+pub fn notify(app: &AppHandle, title: String, body: String) {
+    show(app, title, body);
+}
+
 /// Пробное уведомление из настроек («Проверить уведомления»).
 pub fn test(app: &AppHandle) {
     let name = app.state::<SettingsStore>().get().account_name;

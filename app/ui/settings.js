@@ -157,6 +157,7 @@ TokenCat.i18n.ready.then(function () {
       () => set({ fact_hidden_day: E.dayKey() }));
     $("notify").checked = v.notify;
     $("autostart").checked = v.autostart;
+    $("auto-update").checked = v.auto_update;
     fillSelect($("interval"), v.intervals, v.interval_secs, intervalName);
     fillSelect($("language"), v.languages, v.language, langName);
     fillSelect($("menubar-style"), v.menubar_styles || [], v.menubar_style, (m) => (MENUBAR_NAMES[m] ? T(MENUBAR_NAMES[m]) : m));
@@ -189,6 +190,7 @@ TokenCat.i18n.ready.then(function () {
   $("notify").onchange = (e) => set({ notify: e.target.checked });
   $("cat-fact").onchange = (e) => set({ cat_fact: e.target.checked });
   $("autostart").onchange = (e) => set({ autostart: e.target.checked });
+  $("auto-update").onchange = (e) => set({ auto_update: e.target.checked });
   $("interval").onchange = (e) => set({ interval_secs: Number(e.target.value) });
   $("language").onchange = (e) => set({ language: e.target.value });
   $("notify-test").onclick = () => invoke("notify_test").catch((e) => note("sys-msg", String(e), "bad"));
@@ -216,6 +218,45 @@ TokenCat.i18n.ready.then(function () {
   };
   $("open-log").onclick = () => invoke("open_log").catch((e) => note("manual-msg", String(e), "bad"));
   $("onboarding").onclick = () => invoke("onboarding_open").catch(() => {});
+
+  // ---------- Обновления (B4) ----------
+  // Состояние держит Rust (updater.rs): idle | checking | none | available | downloading |
+  // installing | error. Окно только показывает его и шлёт «проверить» / «обновить».
+
+  function renderUpd(u) {
+    if (!u) return;
+    $("upd-current").textContent = u.current;
+    const busy = ["checking", "downloading", "installing"].includes(u.state);
+    $("upd-check").disabled = busy;
+    let text = T("upd.idle");
+    if (u.state === "checking") text = T("upd.checking");
+    else if (u.state === "none") text = T("upd.none");
+    else if (u.error && !u.version) text = u.error;
+    $("upd-text").textContent = text;
+
+    show("upd-avail", !!u.version);
+    if (!u.version) return;
+    $("upd-title").textContent = T("upd.available", { v: u.version });
+    $("upd-notes").textContent = u.can_install ? (u.notes || "") : T("upd.portable_hint");
+    $("upd-install").textContent = u.can_install ? T("upd.install") : T("upd.download");
+    $("upd-install").disabled = busy;
+    show("upd-progress", u.state === "downloading");
+    $("upd-progress").value = u.progress || 0;
+    let msg = "", cls = "muted";
+    if (u.state === "downloading") msg = T("upd.downloading", { p: u.progress || 0 });
+    else if (u.state === "installing") msg = T("upd.installing");
+    else if (u.error) { msg = u.error; cls = "bad"; }
+    note("upd-msg", msg, cls);
+  }
+
+  $("upd-check").onclick = async () => {
+    try { renderUpd(await invoke("update_check")); } catch (e) { $("upd-text").textContent = String(e); }
+  };
+  $("upd-install").onclick = async () => {
+    try { await invoke("update_install"); } catch (e) { note("upd-msg", String(e), "bad"); }
+  };
+  listen("update-changed", (ev) => renderUpd(ev.payload));
+  invoke("update_status").then(renderUpd).catch(() => {});
 
   // Ссылки на донаты и обратную связь появятся в блоках B6–B7
   const soon = () => note("about-msg", T("about.soon"), "muted");

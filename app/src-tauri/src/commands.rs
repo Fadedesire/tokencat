@@ -68,6 +68,8 @@ pub struct SettingsView {
     pub early_reset_hour: u8,
     pub cat_fact: bool,
     pub fact_hidden_day: Option<String>,
+    /// Автообновление (B4)
+    pub auto_update: bool,
 }
 
 pub fn view(app: &AppHandle) -> SettingsView {
@@ -99,6 +101,7 @@ pub fn view(app: &AppHandle) -> SettingsView {
         early_reset_hour: s.early_reset_hour,
         cat_fact: s.cat_fact,
         fact_hidden_day: s.fact_hidden_day,
+        auto_update: s.auto_update,
     }
 }
 
@@ -134,6 +137,7 @@ pub struct SettingsPatch {
     pub cat_fact: Option<bool>,
     /// «ГГГГ-ММ-ДД» — облачко закрыли в этот день
     pub fact_hidden_day: Option<String>,
+    pub auto_update: Option<bool>,
 }
 
 #[tauri::command]
@@ -215,6 +219,9 @@ pub fn settings_set(window: WebviewWindow, app: AppHandle, patch: SettingsPatch)
         if let Some(d) = patch.fact_hidden_day {
             s.fact_hidden_day = Some(d);
         }
+        if let Some(b) = patch.auto_update {
+            s.auto_update = b;
+        }
     })?;
     if before.interval_secs != after.interval_secs {
         applog::info(format!("интервал обновления: {} с", after.interval_secs));
@@ -252,6 +259,9 @@ pub fn settings_set(window: WebviewWindow, app: AppHandle, patch: SettingsPatch)
             "ранний старт: {}, сброс в {}:00, котофакт: {}",
             after.early_start, after.early_reset_hour, after.cat_fact
         ));
+    }
+    if before.auto_update != after.auto_update {
+        applog::info(format!("автообновление: {}", after.auto_update));
     }
     if before.menubar_style != after.menubar_style {
         applog::info(format!("строка меню: {}", after.menubar_style));
@@ -352,4 +362,28 @@ pub fn webview_low_memory(window: WebviewWindow, low: bool) -> CmdResult<()> {
     #[cfg(not(windows))]
     let _ = low;
     Ok(())
+}
+
+// ---------- Обновления (B4) ----------
+
+/// Состояние обновления для окна настроек.
+#[tauri::command]
+pub fn update_status(window: WebviewWindow) -> CmdResult<crate::updater::Status> {
+    only_main(&window)?;
+    Ok(crate::updater::status())
+}
+
+/// «Проверить обновления».
+#[tauri::command]
+pub async fn update_check(window: WebviewWindow, app: AppHandle) -> CmdResult<crate::updater::Status> {
+    only_main(&window)?;
+    crate::updater::check(&app, true).await;
+    Ok(crate::updater::status())
+}
+
+/// «Обновить» (установленная программа) или «Скачать» (portable — страница релиза).
+#[tauri::command]
+pub async fn update_install(window: WebviewWindow, app: AppHandle) -> CmdResult<()> {
+    only_main(&window)?;
+    crate::updater::install(&app).await
 }

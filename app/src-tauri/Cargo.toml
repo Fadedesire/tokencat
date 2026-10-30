@@ -1,9 +1,11 @@
 [package]
 name = "tokencat"
-version = "0.1.0"
+version = "0.9.0"
 description = "TokenCat — трекер лимитов для Claude (неофициальный)"
 edition = "2021"
 publish = false
+license = "MIT"
+repository = "https://github.com/Fadedesire/tokencat"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -26,6 +28,13 @@ keyring = { version = "3", features = ["windows-native", "apple-native"] }
 auto-launch = "0.6"
 # Язык системы для «Как в системе» (B3): маленький crate без зависимостей на Windows/macOS
 sys-locale = "0.3"
+# Автообновление из GitHub Releases с проверкой подписи (B4). TLS — системный, как у reqwest выше
+# (native-tls), без второго TLS-стека rustls. zip — распаковка архивов обновлений.
+tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls", "zip"] }
+# Внутри updater свой reqwest 0.13 (наш — 0.12). Эта строка кода не добавляет, только включает
+# ему SOCKS, чтобы проверка обновлений шла и через socks5-прокси из настроек.
+# TODO: перейти на reqwest 0.13 в api.rs — уйдёт дубль (≈ −0,5 МБ exe).
+reqwest013 = { package = "reqwest", version = "0.13", default-features = false, features = ["socks"] }
 
 # Системные уведомления (B1). Не плагин Tauri: он подменяет window.Notification во всех
 # окнах, включая окно входа claude.ai.

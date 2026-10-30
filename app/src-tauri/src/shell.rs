@@ -315,6 +315,17 @@ pub fn on_menu(app: &AppHandle, event: MenuEvent) {
                 settings_changed(&app);
             });
         }
+        "update" => {
+            tauri::async_runtime::spawn(async move {
+                if crate::updater::status().can_install {
+                    // Прогресс и ошибки видны в настройках
+                    open_settings(&app, Some("about"));
+                }
+                if let Err(e) = crate::updater::install(&app).await {
+                    applog::warn(e);
+                }
+            });
+        }
         "add_account" => {
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = add_account(&app) {

@@ -156,6 +156,25 @@ S01–S07 — `docs/archive-2026-10-29/DECISIONS.md`.
   интервал — «30 с / 1 мин», маска ключа — «(108)» без слова «символов».
 - .bat писать только с CRLF: с LF cmd рвёт строки с кириллицей («'╤В╨╕╨╡' is not recognized»).
 
+## Выпуск (B4)
+- B4 — Рома: код открыт под MIT (репозиторий публичный); подпись Windows — пока нет, подать в
+  SignPath Foundation (бесплатно для open source); Apple Developer — решим после беты.
+  Azure Artifact Signing частным лицам вне США/Канады недоступна. Пока без подписи —
+  инструкция SmartScreen/Gatekeeper в docs/INSTALL.md, SHA256SUMS в релизе. macOS — ad-hoc
+  подпись (`signingIdentity: "-"`), чтобы не было «повреждено» на Apple Silicon.
+- B4 — релиз: тег `v*` → ci/release.yml: сначала один черновик (job draft, проверка версии
+  в теге = tauri.conf = Cargo.toml и наличия ключа), потом сборки Windows/macOS через
+  tauri-action с `releaseId`; portable-zip и SHA256SUMS докладываем gh. Публикует черновик
+  Рома руками — только тогда его видит автообновление (latest/download/latest.json).
+- B4 — автообновление: tauri-plugin-updater из Rust (без JS-прав), ключ minisign без пароля
+  (`%USERPROFILE%\.tauri\tokencat-updater.key`, секрет `TAURI_SIGNING_PRIVATE_KEY`).
+  Файлы обновления (`createUpdaterArtifacts`) — только в CI (tauri.release.conf.json), чтобы
+  build.bat не требовал ключ. Проверка через 20 с и раз в сутки по часам (не таймер) только в
+  основном профиле; ставим только по клику. Portable/dev → «Скачать» (страница релиза):
+  установленная = рядом с exe есть uninstall.exe. Windows installMode passive.
+- B4 — у updater свой reqwest 0.13 (+0,57 МБ exe); строка `reqwest013` в Cargo.toml только
+  включает ему SOCKS. Позже перевести api.rs на 0.13 и убрать дубль.
+
 ## Процесс
 - 2026-10-29 — Роадмап пересобран в 8 блоков (блок = чат), доки сжаты, вход в чат через
   START.md. Почему: старт каждого мелкого шага в новом чате стоил больше самого шага.

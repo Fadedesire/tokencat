@@ -70,6 +70,12 @@ pub struct Settings {
     pub cat_fact: bool,
     /// День («2026-10-30», местное время), когда облачко закрыли кликом — до завтра не показываем
     pub fact_hidden_day: Option<String>,
+    /// Автообновление (B4): проверять раз в сутки (ставим только по клику)
+    pub auto_update: bool,
+    /// Когда последний раз проверяли обновления (мс от 1970)
+    pub update_checked_at_ms: Option<u64>,
+    /// О какой версии уже прислали уведомление — второй раз не напоминаем
+    pub update_notified: Option<String>,
 }
 
 impl Default for Settings {
@@ -95,6 +101,9 @@ impl Default for Settings {
             early_reset_hour: DEFAULT_RESET_HOUR,
             cat_fact: true,
             fact_hidden_day: None,
+            auto_update: true,
+            update_checked_at_ms: None,
+            update_notified: None,
         }
     }
 }
@@ -285,7 +294,7 @@ mod tests {
         let ok = Settings {
             interval_secs: 120,
             proxy: Some("127.0.0.1:2080".into()),
-            last_org: Some("58a28114-c56e-4a29-af8e-c95d508f8ad3".into()),
+            last_org: Some("11111111-2222-4333-8444-555555555555".into()),
             ..Settings::default()
         }
         .sanitized();

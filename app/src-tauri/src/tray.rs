@@ -83,10 +83,17 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let sep2 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", i18n::t("menu.quit"), true, None::<&str>)?;
 
-    Menu::with_items(
+    let menu = Menu::with_items(
         app,
         &[&refresh, &settings, &sep1, &top, &view, &accounts, &sep2, &support, &quit],
-    )
+    )?;
+    // B4: есть новая версия — первым пунктом «Обновить до X»
+    if let Some(v) = crate::updater::status().version {
+        let upd = MenuItem::with_id(app, "update", i18n::tf("menu.update", &[("v", &v)]), true, None::<&str>)?;
+        menu.insert(&upd, 0)?;
+        menu.insert(&PredefinedMenuItem::separator(app)?, 1)?;
+    }
+    Ok(menu)
 }
 
 /// Создать значок при старте.

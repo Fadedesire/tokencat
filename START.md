@@ -26,6 +26,7 @@ Tauri 2, Rust + чистые HTML/CSS/JS без сборщика и фреймв
   `profile.rs`/`instance.rs` (профили, один экземпляр). `manifest.xml` — манифест Windows.
   `i18n.rs` — языки (B3): строки из `app/locales/*.json`, зашиты в exe.
   `webview_check.rs` — нет WebView2 → понятное окно и выход (B3).
+  `updater.rs` — автообновление (B4): проверка раз в сутки, «Обновить до X», portable → «Скачать».
 - `app/locales/<язык>.json` — все строки и котофакты 9 языков (ключи одинаковые, проверка —
   тест `locales_complete`). Новая строка UI = ключ во все 9 файлов.
 - `app/ui/`: `tokens.css`, `components.css/js` (Panel, LimitRow, состояния), `cat.js` (котик на
@@ -88,6 +89,8 @@ Tauri 2, Rust + чистые HTML/CSS/JS без сборщика и фреймв
   `dev.bat` — сборка и запуск dev (лог `logs\dev-build.log`); `test.bat` — тесты
   (`logs\test.log`); `build.bat` — установщик в `dist\`; `git-sync.bat` — коммит из
   `tools\commit-msg.txt` + push; `check-tools.bat` / `install-tools.bat`.
+- Выпуск версии — `docs/RELEASE.md`: версия в 3 файлах → `git-sync.bat` → `tools\release.bat`
+  (тег) → CI собирает черновик релиза → Рома публикует. QA — `docs/QA.md`.
 - Лог программы: `%LOCALAPPDATA%\app.tokencat.desktop\logs\tokencat.log`.
 - Rust в облачной песочнице не собрать (нет доступа к crates.io) — компиляция только на ПК.
 - Запись на ПК: каждый раз новый путь в облачных outputs, после записи сверять размер файла

@@ -162,6 +162,35 @@
       </details>
     </section>
 
+    <!-- Обновления (B4): статус, «Проверить», «Обновить и перезапустить» / «Скачать» -->
+    <section class="group" id="about">
+      <h2 data-i18n="upd.title"></h2>
+      <div class="box">
+        <div class="item">
+          <div class="text"><span>TokenCat <span id="upd-current" class="version"></span></span>
+            <small id="upd-text"></small>
+          </div>
+          <button id="upd-check" data-i18n="upd.check"></button>
+        </div>
+        <div class="item col" id="upd-avail" hidden>
+          <div class="row-inline">
+            <div class="text grow"><span id="upd-title"></span>
+              <small id="upd-notes" class="pre"></small>
+            </div>
+            <button id="upd-install" class="primary"></button>
+          </div>
+          <progress id="upd-progress" max="100" value="0" hidden></progress>
+          <p id="upd-msg" class="msg" hidden></p>
+        </div>
+        <div class="item">
+          <div class="text"><span data-i18n="upd.auto"></span>
+            <small data-i18n="upd.auto_hint"></small>
+          </div>
+          <label class="switch"><input id="auto-update" type="checkbox"><i></i></label>
+        </div>
+      </div>
+    </section>
+
     <section class="about" id="support">
       <div class="actions">
         <button id="donate" class="primary" data-i18n="about.donate"></button>
