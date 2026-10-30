@@ -24,8 +24,11 @@ Tauri 2, Rust + чистые HTML/CSS/JS без сборщика и фреймв
   всплывающая панель, значок/строка меню macOS), `taskbar.rs` (виджет в панели задач Windows,
   Win32+GDI), `icons.rs` (котик, цифры, кольцо в RGBA), `shell.rs`/`tray.rs` (окна, меню),
   `profile.rs`/`instance.rs` (профили, один экземпляр). `manifest.xml` — манифест Windows.
+  `i18n.rs` — языки (B3): строки из `app/locales/*.json`, зашиты в exe.
+- `app/locales/<язык>.json` — все строки и котофакты 9 языков (ключи одинаковые, проверка —
+  тест `locales_complete`). Новая строка UI = ключ во все 9 файлов.
 - `app/ui/`: `tokens.css`, `components.css/js` (Panel, LimitRow, состояния), `cat.js` (котик на
-  canvas), `index.html`+`main.js`+`overlay.css` — панель, `settings.html/js` — временное окно
+  canvas), `i18n.js` (T(), формат времени), `index.html`+`main.js`+`overlay.css` — панель, `settings.html/js` — временное окно
   настроек (заменяется в B1), `preview.*` — витрина компонентов.
 - Конфиги: `tauri.conf.json` (+ `.windows`/`.macos`), `capabilities/default.json`.
 - `app/spike/` и `prototype/` — образцы, в сборку не входят.
